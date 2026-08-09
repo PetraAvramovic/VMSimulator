@@ -1,6 +1,9 @@
 target/
 .vscode/
 
+# Project plan (working document, not version controlled)
+PLAN.md
+
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
