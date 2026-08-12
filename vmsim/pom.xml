@@ -21,6 +21,20 @@
             <artifactId>javafx-fxml</artifactId>
             <version>26.0.1</version>
         </dependency>
+
+        <!-- Core Jackson Databind Engine -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.18.2</version>
+        </dependency>
+    
+        <!-- Jackson TOML Extension Dataformat -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-toml</artifactId>
+            <version>2.18.2</version>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

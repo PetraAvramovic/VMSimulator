@@ -1,5 +1,6 @@
 target/
 .vscode/
+config/
 
 # Project plan (working document, not version controlled)
 PLAN.md

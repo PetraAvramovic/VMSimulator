@@ -1,5 +1,13 @@
 package rs.ac.bg.etf.model.simulation;
 
+import java.lang.classfile.Instruction;
+import java.util.ArrayList;
+
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.MapperFeature;
+import com.fasterxml.jackson.dataformat.toml.TomlMapper;
+import java.io.File;
+
 import rs.ac.bg.etf.model.simulation.exceptions.InvalidConfig;
 
 public class SimulationConfig 
@@ -21,29 +29,50 @@ public class SimulationConfig
     private TranslationType translationType = TranslationType.PAGED;
     private TLBType tlbType = TLBType.ASSOCIATIVE;
 
-    private long memorySize = -1;
+    private int physicalAddressBits = -1;
     private int numberOfUsers = -1;
 
-    private int wordBitsWidth = -1;
-    private int pageBitsWidth = -1;
-    private int segmentBitsWidth = -1;
+    private int wordBits = -1;
+    private int pageBits = -1;
+    private int segmentBits = -1;
 
     private int tlbSize = -1;
     private int tlbEntriesPerSet = -1;
 
+    private ArrayList<Instruction> instructions;
+
+    public static SimulationConfig loadFromFile(String filePath, SimulationConfig config)
+    {
+        try {
+            TomlMapper tomlMapper = TomlMapper.builder()
+            .enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_AS_NULL) 
+            .enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS)   
+            .build();
+
+            tomlMapper.setDefaultMergeable(true); 
+
+            File file = new File(filePath);
+
+            return tomlMapper.readerForUpdating(config).readValue(file);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to merge external configuration properties", e);
+        }
+    }
+
     public void validateConfig() throws InvalidConfig
     {
-        if (!isPowerOfTwo(memorySize))
+        if (physicalAddressBits <= 0)
         {
-            throw new InvalidConfig("memorySize is required and must be a power of 2");
+            throw new InvalidConfig("physicalAddressBits is required");
         }
         if (!isPowerOfTwo(numberOfUsers))
         {
             throw new InvalidConfig("numberOfUsers is required and must be a power of 2");
         }
-        if (wordBitsWidth <= 0)
+        if (wordBits <= 0)
         {
-            throw new InvalidConfig("wordBitsWidth is required");
+            throw new InvalidConfig("wordBits is required");
         }
         if (!isPowerOfTwo(tlbSize))
         {
@@ -52,16 +81,16 @@ public class SimulationConfig
 
         if (translationType == TranslationType.PAGED || translationType == TranslationType.SEGMENT_PAGED)
         {
-            if (pageBitsWidth <= 0)
+            if (pageBits <= 0)
             {
-                throw new InvalidConfig("pageBitsWidth is required for " + translationType);
+                throw new InvalidConfig("pageBits is required for " + translationType);
             }
         }
         if (translationType == TranslationType.SEGMENT || translationType == TranslationType.SEGMENT_PAGED)
         {
-            if (segmentBitsWidth <= 0)
+            if (segmentBits <= 0)
             {
-                throw new InvalidConfig("segmentBitsWidth is required for " + translationType);
+                throw new InvalidConfig("segmentBits is required for " + translationType);
             }
         }
 
@@ -78,17 +107,17 @@ public class SimulationConfig
 
     public long getVirtualMemorySize()
     {
-        int bitsWidth = wordBitsWidth;
+        int bitsWidth = wordBits;
 
         switch (translationType) {
             case TranslationType.PAGED:
-                bitsWidth += pageBitsWidth;
+                bitsWidth += pageBits;
                 break;
             case TranslationType.SEGMENT:
-                bitsWidth += segmentBitsWidth;
+                bitsWidth += segmentBits;
                 break;
             case TranslationType.SEGMENT_PAGED:
-                bitsWidth += pageBitsWidth + segmentBitsWidth;
+                bitsWidth += pageBits + segmentBits;
             default:
                 break;
         }
@@ -112,12 +141,10 @@ public class SimulationConfig
     }
 
     public long getMemorySize() {
-        return memorySize;
+        return 1L << physicalAddressBits;
     }
 
-    public void setMemorySize(long memorySize) {
-        this.memorySize = memorySize;
-    }
+    
 
     public int getNumberOfUsers() {
         return numberOfUsers;
@@ -127,28 +154,28 @@ public class SimulationConfig
         this.numberOfUsers = numberOfUsers;
     }
 
-    public int getWordBitsWidth() {
-        return wordBitsWidth;
+    public int getWordBits() {
+        return wordBits;
     }
 
-    public void setWordBitsWidth(int wordBitsWidth) {
-        this.wordBitsWidth = wordBitsWidth;
+    public void setWordBits(int wordBitsWidth) {
+        this.wordBits = wordBitsWidth;
     }
 
-    public int getPageBitsWidth() {
-        return pageBitsWidth;
+    public int getPageBits() {
+        return pageBits;
     }
 
-    public void setPageBitsWidth(int pageBitsWidth) {
-        this.pageBitsWidth = pageBitsWidth;
+    public void setPageBits(int pageBitsWidth) {
+        this.pageBits = pageBitsWidth;
     }
 
-    public int getSegmentBitsWidth() {
-        return segmentBitsWidth;
+    public int getSegmentBits() {
+        return segmentBits;
     }
 
-    public void setSegmentBitsWidth(int segmentBitsWidth) {
-        this.segmentBitsWidth = segmentBitsWidth;
+    public void setSegmentBits(int segmentBitsWidth) {
+        this.segmentBits = segmentBitsWidth;
     }
 
     public int getTlbSize() {
@@ -165,6 +192,33 @@ public class SimulationConfig
 
     public void setTlbEntriesPerSet(int tlbEntriesPerSet) {
         this.tlbEntriesPerSet = tlbEntriesPerSet;
+    }
+
+    public ArrayList<Instruction> getInstructions() {
+        return instructions;
+    }
+
+    public void setInstructions(ArrayList<Instruction> instructions) {
+        this.instructions = instructions;
+    }
+
+    public int getPhysicalAddressBits() {
+        return physicalAddressBits;
+    }
+
+    public void setPhysicalAddressBits(int physicalAddressBits) {
+        this.physicalAddressBits = physicalAddressBits;
+    }
+
+    @Override
+    public String toString()
+    {
+        return String.format(
+            "SimulationConfig[translationType=%s, tlbType=%s, physicalAddressBits=%d, numberOfUsers=%d, "
+            + "wordBits=%d, pageBits=%d, segmentBits=%d, tlbSize=%d, tlbEntriesPerSet=%d, instructions=%d]",
+            translationType, tlbType, physicalAddressBits, numberOfUsers,
+            wordBits, pageBits, segmentBits, tlbSize, tlbEntriesPerSet,
+            instructions == null ? 0 : instructions.size());
     }
 
     

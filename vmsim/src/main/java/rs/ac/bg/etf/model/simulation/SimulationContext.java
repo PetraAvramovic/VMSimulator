@@ -6,7 +6,7 @@ import rs.ac.bg.etf.model.memory.*;
 
 public abstract class SimulationContext 
 {
-    private SimulationConfig config;
+    protected SimulationConfig config;
     private Memory memory;
     private ArrayList<Instruction> instructions;
     private int currentInstructionInd = -1;
@@ -18,7 +18,8 @@ public abstract class SimulationContext
 
     public void init()
     {
-
+        memory = new Memory(config.getMemorySize());
+        
     }
 
     public Instruction getCurrentInstruction()

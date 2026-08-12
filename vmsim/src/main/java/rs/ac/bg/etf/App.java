@@ -8,6 +8,9 @@ import javafx.stage.Stage;
 
 import java.io.IOException;
 
+import rs.ac.bg.etf.model.simulation.SimulationConfig;
+import rs.ac.bg.etf.model.simulation.exceptions.InvalidConfig;
+
 /**
  * JavaFX App
  */
@@ -17,6 +20,19 @@ public class App extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
+        SimulationConfig config = new SimulationConfig();
+        config.setTlbSize(2048);
+        config = SimulationConfig.loadFromFile("C:\\Users\\gaga6\\OneDrive\\Desktop\\Faks\\Diplomski\\VMSimulator\\config\\sim_config.toml", config);
+
+        System.out.println(config.toString());
+
+        try {
+            config.validateConfig();
+        } catch (InvalidConfig e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+
         scene = new Scene(loadFXML("primary"), 640, 480);
         stage.setScene(scene);
         stage.show();
