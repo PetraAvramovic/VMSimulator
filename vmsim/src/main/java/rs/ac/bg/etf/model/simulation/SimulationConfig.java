@@ -1,7 +1,8 @@
 package rs.ac.bg.etf.model.simulation;
 
-import java.lang.classfile.Instruction;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
@@ -9,6 +10,7 @@ import com.fasterxml.jackson.dataformat.toml.TomlMapper;
 import java.io.File;
 
 import rs.ac.bg.etf.model.simulation.exceptions.InvalidConfig;
+import rs.ac.bg.etf.model.memory.Instruction;
 
 public class SimulationConfig 
 {
@@ -40,6 +42,12 @@ public class SimulationConfig
     private int tlbEntriesPerSet = -1;
 
     private ArrayList<Instruction> instructions;
+    private ArrayList<MemoryInitializationBlock> memoryInit;
+
+    public static record MemoryInitializationBlock(
+        long startAddress,
+        List<Long> data
+    ) {}
 
     public static SimulationConfig loadFromFile(String filePath, SimulationConfig config)
     {
@@ -103,6 +111,18 @@ public class SimulationConfig
     private static boolean isPowerOfTwo(long value)
     {
         return value > 0 && (value & (value - 1)) == 0;
+    }
+
+    public long generateDiskSeed() 
+    {
+        return Objects.hash(
+            this.translationType, 
+            this.wordBits, 
+            this.pageBits, 
+            this.segmentBits,
+            this.numberOfUsers, 
+            this.physicalAddressBits
+        );
     }
 
     public long getVirtualMemorySize()
@@ -213,12 +233,39 @@ public class SimulationConfig
     @Override
     public String toString()
     {
-        return String.format(
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format(
             "SimulationConfig[translationType=%s, tlbType=%s, physicalAddressBits=%d, numberOfUsers=%d, "
-            + "wordBits=%d, pageBits=%d, segmentBits=%d, tlbSize=%d, tlbEntriesPerSet=%d, instructions=%d]",
+            + "wordBits=%d, pageBits=%d, segmentBits=%d, tlbSize=%d, tlbEntriesPerSet=%d]",
             translationType, tlbType, physicalAddressBits, numberOfUsers,
-            wordBits, pageBits, segmentBits, tlbSize, tlbEntriesPerSet,
-            instructions == null ? 0 : instructions.size());
+            wordBits, pageBits, segmentBits, tlbSize, tlbEntriesPerSet));
+
+        int count = instructions == null ? 0 : instructions.size();
+        sb.append("\nInstructions (").append(count).append("):");
+        for (int i = 0; i < count; i++)
+        {
+            sb.append("\n  [").append(i).append("] ").append(instructions.get(i));
+        }
+
+        int blockCount = memoryInit == null ? 0 : memoryInit.size();
+        sb.append("\nMemory init blocks (").append(blockCount).append("):");
+        for (int i = 0; i < blockCount; i++)
+        {
+            MemoryInitializationBlock block = memoryInit.get(i);
+            sb.append("\n  [").append(i).append("] startAddress=0x")
+              .append(Long.toHexString(block.startAddress()))
+              .append(", data=").append(block.data());
+        }
+
+        return sb.toString();
+    }
+
+    public ArrayList<MemoryInitializationBlock> getMemoryInit() {
+        return memoryInit;
+    }
+
+    public void setMemoryInit(ArrayList<MemoryInitializationBlock> memoryInit) {
+        this.memoryInit = memoryInit;
     }
 
     

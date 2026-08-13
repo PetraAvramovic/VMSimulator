@@ -1,5 +1,8 @@
 package rs.ac.bg.etf.model.memory;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class Instruction 
 {
     public enum AccessType
@@ -14,7 +17,12 @@ public class Instruction
     private long address;
     private long value = 0L;
 
-    public Instruction(int user, AccessType accessType, long address) {
+    @JsonCreator
+    public Instruction(
+        @JsonProperty("user") int user, 
+        @JsonProperty("accessType") AccessType accessType, 
+        @JsonProperty("address") long address
+    ) {
         this.user = user;
         this.accessType = accessType;
         this.address = address;

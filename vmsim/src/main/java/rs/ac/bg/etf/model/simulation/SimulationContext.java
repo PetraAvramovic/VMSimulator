@@ -19,7 +19,7 @@ public abstract class SimulationContext
     public void init()
     {
         memory = new Memory(config.getMemorySize());
-        
+        instructions = config.getInstructions();
     }
 
     public Instruction getCurrentInstruction()

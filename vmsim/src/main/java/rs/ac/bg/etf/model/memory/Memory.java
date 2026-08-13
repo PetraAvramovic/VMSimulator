@@ -1,7 +1,9 @@
 package rs.ac.bg.etf.model.memory;
 
 import rs.ac.bg.etf.model.memory.exceptions.*;
+import rs.ac.bg.etf.model.simulation.SimulationConfig;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Stack;
 
@@ -20,6 +22,28 @@ public class Memory
     public Memory(long memorySize) 
     {
         this.memorySize = memorySize;
+    }
+
+    public void init(ArrayList<SimulationConfig.MemoryInitializationBlock> memoryInit)
+    {
+        if (memoryInit == null)
+            return;
+
+        for (SimulationConfig.MemoryInitializationBlock block : memoryInit)
+        {
+            long address = block.startAddress();
+            for (Long value : block.data())
+            {
+                memory.put(address, value);
+                address++;
+            }
+        }
+    }
+
+    public void restart()
+    {
+        while (!writes.empty())
+            undoWrite();
     }
 
     private void checkAddress(long address)
@@ -69,13 +93,20 @@ public class Memory
             return memory.get(address);
     }
 
-    public void write(long address)
+    public void write(long address, long value)
     {
         checkAddress(address);
 
         if (!memory.containsKey(address))
             memory.put(address, 0L);
 
+        long memoryValue = memory.get(address);
+        writes.push(new MemoryPair(address, memoryValue));
+        memory.put(address, value);
+    }
 
+    public void execute(long address)
+    {
+        checkAddress(address);
     }
 }

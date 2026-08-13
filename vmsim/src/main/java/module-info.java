@@ -7,5 +7,7 @@ module rs.ac.bg.etf {
 
     opens rs.ac.bg.etf to javafx.fxml;
     opens rs.ac.bg.etf.model.simulation to com.fasterxml.jackson.databind;
+    opens rs.ac.bg.etf.model.memory to com.fasterxml.jackson.databind;
+
     exports rs.ac.bg.etf;
 }
