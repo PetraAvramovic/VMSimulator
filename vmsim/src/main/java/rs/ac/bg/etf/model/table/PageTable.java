@@ -3,6 +3,8 @@ package rs.ac.bg.etf.model.table;
 import java.util.HashMap;
 import java.util.Map;
 
+import rs.ac.bg.etf.model.simulation.SimulationConfig;
+
 public class PageTable 
 {
     private Map<Long, PageTableDescriptor> entries = new HashMap<>();
@@ -15,6 +17,28 @@ public class PageTable
         this.diskAddressGenerator = diskAddressGenerator;
         this.user = user;
         this.maxPages = maxPages;
+    }
+
+    public void init(Map<Long, SimulationConfig.PageTableDescriptorInit> pageTableInit)
+    {
+        if (pageTableInit == null)
+            return;
+
+        for (Map.Entry<Long, SimulationConfig.PageTableDescriptorInit> entry : pageTableInit.entrySet())
+        {
+            long page = entry.getKey();
+            SimulationConfig.PageTableDescriptorInit initData = entry.getValue();
+
+            long disk = diskAddressGenerator.getDiskAddress((user << maxPages) + page);
+            PageTableDescriptor descriptor = new PageTableDescriptor(
+                initData.valid(),
+                initData.dirty(),
+                initData.block(),
+                disk
+            );
+
+            entries.put(page, descriptor);
+        }
     }
     
     public PageTableDescriptor getEntry(long page)

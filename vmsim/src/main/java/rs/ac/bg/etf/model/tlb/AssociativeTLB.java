@@ -4,10 +4,8 @@ package rs.ac.bg.etf.model.tlb;
  * Fully associative TLB: any entry can occupy any slot.
  * Lookup performs a linear search over all entries; insertion uses FIFO
  * replacement when the TLB is full.
- *
- * @param <E> the type of TLB entry stored
  */
-public class AssociativeTLB<E extends TLBEntry> extends TLB<E>
+public class AssociativeTLB extends TLB
 {
     public AssociativeTLB(int size, int addressBits, int processBits)
     {
@@ -15,9 +13,9 @@ public class AssociativeTLB<E extends TLBEntry> extends TLB<E>
     }
     
     @Override
-    public E lookup(int tag)
+    public TLBEntry lookup(long tag)
     {
-        for (E entry : entries)
+        for (TLBEntry entry : entries)
         {
             if (entry.isHit(tag))
             {
@@ -28,7 +26,7 @@ public class AssociativeTLB<E extends TLBEntry> extends TLB<E>
     }
     
     @Override
-    public void insert(E entry)
+    public void insert(TLBEntry entry)
     {
         if (entries.size() >= size)
         {
@@ -38,7 +36,7 @@ public class AssociativeTLB<E extends TLBEntry> extends TLB<E>
     }
     
     @Override
-    public void invalidateTag(int tag)
+    public void invalidateTag(long tag)
     {
         entries.removeIf(entry -> entry.getTag() == tag);
     }

@@ -1,7 +1,9 @@
 package rs.ac.bg.etf.model.simulation;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -43,10 +45,17 @@ public class SimulationConfig
 
     private ArrayList<Instruction> instructions;
     private ArrayList<MemoryInitializationBlock> memoryInit;
+    private Map<Integer, Map<Long, PageTableDescriptorInit>> pageTables = new HashMap<>();
 
     public static record MemoryInitializationBlock(
         long startAddress,
         List<Long> data
+    ) {}
+
+    public record PageTableDescriptorInit(
+        boolean valid,
+        boolean dirty,
+        long block
     ) {}
 
     public static SimulationConfig loadFromFile(String filePath, SimulationConfig config)
@@ -125,7 +134,7 @@ public class SimulationConfig
         );
     }
 
-    public long getVirtualMemorySize()
+    public int getVirtualMemoryBits()
     {
         int bitsWidth = wordBits;
 
@@ -141,9 +150,15 @@ public class SimulationConfig
             default:
                 break;
         }
-        return 1 << bitsWidth;
+
+        return bitsWidth;
     }
 
+    public long getVirtualMemorySize()
+    {
+        return 1 << getVirtualMemoryBits();
+    }
+    
     public TranslationType getTranslationType() {
         return translationType;
     }
@@ -163,8 +178,6 @@ public class SimulationConfig
     public long getMemorySize() {
         return 1L << physicalAddressBits;
     }
-
-    
 
     public int getNumberOfUsers() {
         return numberOfUsers;
@@ -266,6 +279,14 @@ public class SimulationConfig
 
     public void setMemoryInit(ArrayList<MemoryInitializationBlock> memoryInit) {
         this.memoryInit = memoryInit;
+    }
+
+    public Map<Integer, Map<Long, PageTableDescriptorInit>> getPageTables() {
+        return pageTables;
+    }
+
+    public void setPageTables(Map<Integer, Map<Long, PageTableDescriptorInit>> pageTables) {
+        this.pageTables = pageTables;
     }
 
     

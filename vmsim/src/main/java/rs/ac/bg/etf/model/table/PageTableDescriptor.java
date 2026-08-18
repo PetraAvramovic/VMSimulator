@@ -42,7 +42,7 @@ public class PageTableDescriptor
     @Override
     public String toString()
     {
-        return String.format("PageTableDescriptor[valid=%s, dirty=%s, block=%d, disk=%d]",
+        return String.format("PageTableDescriptor[valid=%s, dirty=%s, block=%x, disk=%08X]",
             valid, dirty, block, disk);
     }
 }

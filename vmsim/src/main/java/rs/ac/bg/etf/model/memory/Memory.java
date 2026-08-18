@@ -54,7 +54,7 @@ public class Memory
 
     public void executeInstruction(Instruction instruction)
     {
-        long address = instruction.getAddress();
+        long address = instruction.getVirtualAddress();
         long value = instruction.getValue();
         Instruction.AccessType accessType = instruction.getAccessType();
 

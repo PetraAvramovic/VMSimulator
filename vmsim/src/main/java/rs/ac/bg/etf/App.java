@@ -8,6 +8,7 @@ import javafx.stage.Stage;
 
 import java.io.IOException;
 
+import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.SimulationConfig;
 import rs.ac.bg.etf.model.simulation.exceptions.InvalidConfig;
 
@@ -24,7 +25,12 @@ public class App extends Application {
         config.setTlbSize(2048);
         config = SimulationConfig.loadFromFile("C:\\Users\\gaga6\\OneDrive\\Desktop\\Faks\\Diplomski\\VMSimulator\\config\\sim_config.toml", config);
 
-        System.out.println(config.toString());
+        //System.out.println(config.toString());
+
+        PageSimulationContext context = new PageSimulationContext(config);
+        context.init();
+
+        System.out.println(context.toString());
 
         try {
             config.validateConfig();

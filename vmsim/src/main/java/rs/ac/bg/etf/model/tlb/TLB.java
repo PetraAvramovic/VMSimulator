@@ -9,13 +9,11 @@ import java.util.List;
  * Address-structure-agnostic: works with a generic address component
  * (page number, segment number, or combined value) and a process id,
  * combined into a single tag: tag = (processId << addressBits) | addressComponent.
- *
- * @param <E> the type of TLB entry stored
  */
-public abstract class TLB<E extends TLBEntry>
+public abstract class TLB
 {
     protected int size;
-    protected ArrayList<E> entries;
+    protected ArrayList<TLBEntry> entries;
     protected int addressBits;
     protected int processBits;
     
@@ -32,24 +30,29 @@ public abstract class TLB<E extends TLBEntry>
      * @param tag The tag to search for
      * @return The matching entry, or null on miss
      */
-    public abstract E lookup(int tag);
+    public abstract TLBEntry lookup(long tag);
     
     /**
      * Inserts a new entry, replacing an existing one if the TLB (or relevant slot/set) is full.
      * @param entry The entry to insert
      */
-    public abstract void insert(E entry);
+    public abstract void insert(TLBEntry entry);
     
     /**
      * Invalidates the entry with the matching tag, if present.
      * @param tag The tag to invalidate
      */
-    public abstract void invalidateTag(int tag);
+    public abstract void invalidateTag(long tag);
     
     /**
-     * Invalidates all entries belonging to the given process.
-     * @param processId The process id whose entries should be flushed
+     * Checks if an entry with the given tag exists in the TLB.
+     * @param tag The tag to search for
+     * @return true if an entry with the tag exists, false otherwise
      */
+    public boolean isHit(long tag)
+    {
+        return lookup(tag) != null;
+    }
     public void flushProcessTag(int processId)
     {
         entries.removeIf(entry -> entry != null && (entry.getTag() >>> addressBits) == processId);
@@ -61,12 +64,12 @@ public abstract class TLB<E extends TLBEntry>
      * @param addressComponent The address component (page number, segment number, etc.)
      * @return The combined tag
      */
-    public int calculateTag(int processId, int addressComponent)
+    public long calculateTag(int processId, long addressComponent)
     {
         return (processId << addressBits) | addressComponent;
     }
     
-    public List<E> getEntries()
+    public List<TLBEntry> getEntries()
     {
         return Collections.unmodifiableList(entries);
     }

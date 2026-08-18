@@ -14,18 +14,20 @@ public class Instruction
     
     private int user;
     private AccessType accessType;
-    private long address;
+    private long virtualAddress;
+    private long physicalAddress = -1;
+
     private long value = 0L;
 
     @JsonCreator
     public Instruction(
         @JsonProperty("user") int user, 
         @JsonProperty("accessType") AccessType accessType, 
-        @JsonProperty("address") long address
+        @JsonProperty("virtualAddress") long virtualAddress
     ) {
         this.user = user;
         this.accessType = accessType;
-        this.address = address;
+        this.virtualAddress = virtualAddress;
     }
 
     public Instruction(int user, AccessType accessType, long address, long value) {
@@ -43,9 +45,9 @@ public class Instruction
         return accessType;
     }
 
-    public long getAddress() 
+    public long getVirtualAddress() 
     {
-        return address;
+        return virtualAddress;
     }
 
     public long getValue() 
@@ -58,15 +60,23 @@ public class Instruction
         this.value = value;
     }
 
+    public long getPhysicalAddress() {
+        return physicalAddress;
+    }
+
+    public void setPhysicalAddress(long physicalAddress) {
+        this.physicalAddress = physicalAddress;
+    }
+
     @Override
     public String toString()
     {
         if (accessType == AccessType.WR)
         {
             return String.format("Instruction[user=%d, accessType=%s, address=0x%x, value=0x%x]",
-                                 user, accessType, address, value);
+                                 user, accessType, virtualAddress, value);
         }
         return String.format("Instruction[user=%d, accessType=%s, address=0x%x]",
-                             user, accessType, address);
+                             user, accessType, virtualAddress);
     }
 }

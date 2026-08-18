@@ -10,6 +10,8 @@ public class Simulation<T extends SimulationContext>
    
     private Stack<SimulationStep<T>> stepHistory = new Stack<>();
     private SimulationStep<T> currentStep = null;
+    private int currentStepNum = -1;
+        
 
     public Simulation(T context) 
     {

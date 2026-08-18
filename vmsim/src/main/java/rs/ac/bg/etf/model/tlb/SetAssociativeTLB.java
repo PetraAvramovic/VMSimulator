@@ -5,42 +5,40 @@ package rs.ac.bg.etf.model.tlb;
  * A tag maps to a set via (tag % numSets); within a set, lookup is linear
  * and insertion uses FIFO replacement when the set is full.
  * Empty slots are represented by null so the UI can render them as EMPTY.
- *
- * @param <E> the type of TLB entry stored
  */
-public class SetAssociativeTLB<E extends TLBEntry> extends TLB<E>
+public class SetAssociativeTLB extends TLB
 {
-    private final int associativity;
+    private final int entriesPerSet;
     private final int numSets;
     
-    public SetAssociativeTLB(int size, int addressBits, int processBits, int associativity)
+    public SetAssociativeTLB(int size, int addressBits, int processBits, int entriesPerSet)
     {
         super(size, addressBits, processBits);
-        this.associativity = associativity;
-        this.numSets = size / associativity;
+        this.entriesPerSet = entriesPerSet;
+        this.numSets = size / entriesPerSet;
         for (int i = 0; i < size; i++)
         {
             entries.add(null);
         }
     }
     
-    private int setIndexFor(int tag)
+    private int setIndexFor(long tag)
     {
         return Math.floorMod(tag, numSets);
     }
     
     private int setStart(int setIndex)
     {
-        return setIndex * associativity;
+        return setIndex * entriesPerSet;
     }
     
     @Override
-    public E lookup(int tag)
+    public TLBEntry lookup(long tag)
     {
         int start = setStart(setIndexFor(tag));
-        for (int i = start; i < start + associativity; i++)
+        for (int i = start; i < start + entriesPerSet; i++)
         {
-            E entry = entries.get(i);
+            TLBEntry entry = entries.get(i);
             if (entry != null && entry.isHit(tag))
             {
                 return entry;
@@ -50,10 +48,10 @@ public class SetAssociativeTLB<E extends TLBEntry> extends TLB<E>
     }
     
     @Override
-    public void insert(E entry)
+    public void insert(TLBEntry entry)
     {
         int start = setStart(setIndexFor(entry.getTag()));
-        for (int i = start; i < start + associativity; i++)
+        for (int i = start; i < start + entriesPerSet; i++)
         {
             if (entries.get(i) == null)
             {
@@ -62,20 +60,20 @@ public class SetAssociativeTLB<E extends TLBEntry> extends TLB<E>
             }
         }
         // Set is full: FIFO eviction - shift left, insert as newest
-        for (int i = start; i < start + associativity - 1; i++)
+        for (int i = start; i < start + entriesPerSet - 1; i++)
         {
             entries.set(i, entries.get(i + 1));
         }
-        entries.set(start + associativity - 1, entry);
+        entries.set(start + entriesPerSet - 1, entry);
     }
     
     @Override
-    public void invalidateTag(int tag)
+    public void invalidateTag(long tag)
     {
         int start = setStart(setIndexFor(tag));
-        for (int i = start; i < start + associativity; i++)
+        for (int i = start; i < start + entriesPerSet; i++)
         {
-            E entry = entries.get(i);
+            TLBEntry entry = entries.get(i);
             if (entry != null && entry.getTag() == tag)
             {
                 entries.set(i, null);
@@ -89,7 +87,7 @@ public class SetAssociativeTLB<E extends TLBEntry> extends TLB<E>
     {
         for (int i = 0; i < entries.size(); i++)
         {
-            E entry = entries.get(i);
+            TLBEntry entry = entries.get(i);
             if (entry != null && (entry.getTag() >>> addressBits) == processId)
             {
                 entries.set(i, null);
@@ -97,9 +95,9 @@ public class SetAssociativeTLB<E extends TLBEntry> extends TLB<E>
         }
     }
     
-    public int getAssociativity()
+    public int getEntriesPerSet()
     {
-        return associativity;
+        return entriesPerSet;
     }
     
     public int getNumSets()
