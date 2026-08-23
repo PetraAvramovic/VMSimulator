@@ -36,8 +36,24 @@ public class AssociativeTLB extends TLB
     }
     
     @Override
-    public void invalidateTag(long tag)
+    public TLBEntry invalidateEntry(long tag)
     {
-        entries.removeIf(entry -> entry.getTag() == tag);
+        for (int i = 0; i < entries.size(); i++)
+        {
+            TLBEntry entry = entries.get(i);
+            if (entry.getTag() == tag)
+            {
+                entries.remove(i);
+                pushInvalidatedEntry(entry, i);
+                return entry;
+            }
+        }
+        return null;
+    }
+    
+    @Override
+    protected void restoreInvalidatedEntry(InvalidationRecord record)
+    {
+        entries.add(record.position, record.entry);
     }
 }

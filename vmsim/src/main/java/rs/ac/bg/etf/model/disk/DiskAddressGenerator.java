@@ -1,4 +1,4 @@
-package rs.ac.bg.etf.model.table;
+package rs.ac.bg.etf.model.disk;
 
 public class DiskAddressGenerator 
 {

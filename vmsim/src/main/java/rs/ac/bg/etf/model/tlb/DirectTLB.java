@@ -39,14 +39,23 @@ public class DirectTLB extends TLB
     }
     
     @Override
-    public void invalidateTag(long tag)
+    public TLBEntry invalidateEntry(long tag)
     {
         int index = indexFor(tag);
         TLBEntry entry = entries.get(index);
         if (entry != null && entry.getTag() == tag)
         {
             entries.set(index, null);
+            pushInvalidatedEntry(entry, index);
+            return entry;
         }
+        return null;
+    }
+    
+    @Override
+    protected void restoreInvalidatedEntry(InvalidationRecord record)
+    {
+        entries.set(record.position, record.entry);
     }
     
     @Override

@@ -1,6 +1,7 @@
 package rs.ac.bg.etf.model.simulation.step;
 
 import rs.ac.bg.etf.model.memory.Instruction;
+import rs.ac.bg.etf.model.memory.Instruction.AccessType;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
 import rs.ac.bg.etf.model.tlb.TLB;
 import rs.ac.bg.etf.model.tlb.TLBEntry;
@@ -11,7 +12,6 @@ public abstract class TLBLookupStep<T extends SimulationContext> extends Simulat
     protected TLBLookupStep(T context) 
     {
         super(context);
-        //TODO Auto-generated constructor stub
     }
 
     public abstract SimulationStep<T> nextStep(TLBEntry entry);
@@ -27,6 +27,9 @@ public abstract class TLBLookupStep<T extends SimulationContext> extends Simulat
 
         long tag = tlb.calculateTag(user, addressComponent);
         TLBEntry entry = tlb.lookup(tag);
+
+        if (entry != null && !entry.isDirty() && currentInstruction.getAccessType() == AccessType.WR)
+            entry.setDirty(true);
         
         return nextStep(entry);
     }

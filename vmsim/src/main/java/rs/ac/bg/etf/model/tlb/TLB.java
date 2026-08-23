@@ -3,6 +3,7 @@ package rs.ac.bg.etf.model.tlb;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Stack;
 
 /**
  * Abstract base class for TLB implementations.
@@ -12,10 +13,25 @@ import java.util.List;
  */
 public abstract class TLB
 {
+    /**
+     * Record of an invalidated entry with its original position.
+     */
+    protected static class InvalidationRecord
+    {
+        public final TLBEntry entry;
+        public final int position;
+        
+        public InvalidationRecord(TLBEntry entry, int position)
+        {
+            this.entry = entry;
+            this.position = position;
+        }
+    }
     protected int size;
     protected ArrayList<TLBEntry> entries;
     protected int addressBits;
     protected int processBits;
+    protected Stack<InvalidationRecord> invalidationStack;
     
     public TLB(int size, int addressBits, int processBits)
     {
@@ -23,6 +39,7 @@ public abstract class TLB
         this.entries = new ArrayList<>();
         this.addressBits = addressBits;
         this.processBits = processBits;
+        this.invalidationStack = new Stack<>();
     }
     
     /**
@@ -41,8 +58,45 @@ public abstract class TLB
     /**
      * Invalidates the entry with the matching tag, if present.
      * @param tag The tag to invalidate
+     * @return The entry that was invalidated, or null if no matching entry was found
      */
-    public abstract void invalidateTag(long tag);
+    public abstract TLBEntry invalidateEntry(long tag);
+    
+    /**
+     * Restores an invalidated entry to its original position.
+     * Called by undoInvalidation to restore entries with position awareness.
+     * @param record The invalidation record containing the entry and its original position
+     */
+    protected abstract void restoreInvalidatedEntry(InvalidationRecord record);
+    
+    /**
+     * Undoes the last invalidation by popping from the invalidation stack and restoring.
+     * @return true if an undo was performed, false if the stack was empty
+     */
+    public boolean undoInvalidation()
+    {
+        if (invalidationStack.isEmpty())
+        {
+            return false;
+        }
+        InvalidationRecord record = invalidationStack.pop();
+        restoreInvalidatedEntry(record);
+        return true;
+    }
+    
+    /**
+     * Protected helper to push an invalidated entry onto the undo stack with its position.
+     * Called by subclasses in their invalidateEntry implementations.
+     * @param entry The entry that was invalidated
+     * @param position Position-specific data (meaning depends on subclass: index for associative, slot for direct, etc.)
+     */
+    protected void pushInvalidatedEntry(TLBEntry entry, int position)
+    {
+        if (entry != null)
+        {
+            invalidationStack.push(new InvalidationRecord(entry, position));
+        }
+    }
     
     /**
      * Checks if an entry with the given tag exists in the TLB.

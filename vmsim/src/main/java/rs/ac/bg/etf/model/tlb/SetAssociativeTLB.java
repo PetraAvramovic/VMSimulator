@@ -68,7 +68,7 @@ public class SetAssociativeTLB extends TLB
     }
     
     @Override
-    public void invalidateTag(long tag)
+    public TLBEntry invalidateEntry(long tag)
     {
         int start = setStart(setIndexFor(tag));
         for (int i = start; i < start + entriesPerSet; i++)
@@ -77,9 +77,17 @@ public class SetAssociativeTLB extends TLB
             if (entry != null && entry.getTag() == tag)
             {
                 entries.set(i, null);
-                return;
+                pushInvalidatedEntry(entry, i);
+                return entry;
             }
         }
+        return null;
+    }
+    
+    @Override
+    protected void restoreInvalidatedEntry(InvalidationRecord record)
+    {
+        entries.set(record.position, record.entry);
     }
     
     @Override

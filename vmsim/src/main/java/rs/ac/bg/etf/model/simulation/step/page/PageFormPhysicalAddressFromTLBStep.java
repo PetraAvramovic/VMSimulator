@@ -17,10 +17,12 @@ public class PageFormPhysicalAddressFromTLBStep<T extends PageSimulationContext>
     public SimulationStep<T> execute() 
     {
         long physicalAddress = (entry.getBlock() << context.getWordBits()) | context.getWordBits();
+        previousPhysicalAddress = context.getCurrentPhysicalAddress();
+        
         context.setCurrentPhysicalAddress(physicalAddress);
         context.getCurrentInstruction().setPhysicalAddress(physicalAddress);
 
-        return new PageAccessMemoryStep<T>();
+        return new PageMemoryAccessStep<T>(context);
     }
 
 }

@@ -4,19 +4,13 @@ import rs.ac.bg.etf.model.memory.exceptions.*;
 import rs.ac.bg.etf.model.simulation.SimulationConfig;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Stack;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
-/**
- * MemoryPair
-long address, long value */
-record MemoryPair(long address, long value) {
-}
 
 public class Memory 
 {
-    private HashMap<Long, Long> memory = new HashMap<>();
-    private Stack<MemoryPair> writes = new Stack<>();
+    private TreeMap<Long, Long> memory = new TreeMap<>();
     private long memorySize;
 
     public Memory(long memorySize) 
@@ -40,47 +34,10 @@ public class Memory
         }
     }
 
-    public void restart()
-    {
-        while (!writes.empty())
-            undoWrite();
-    }
-
     private void checkAddress(long address)
     {
         if (Long.compareUnsigned(address, memorySize) >= 0)
             throw new MemoryBoundsException(address, memorySize);
-    }
-
-    public void executeInstruction(Instruction instruction)
-    {
-        long address = instruction.getVirtualAddress();
-        long value = instruction.getValue();
-        Instruction.AccessType accessType = instruction.getAccessType();
-
-        checkAddress(address);
-
-        Long memoryValue = memory.get(address);
-        if (memoryValue == null)
-            memoryValue = 0L;
-
-        if (accessType == Instruction.AccessType.RD)
-        {
-            instruction.setValue(memoryValue);
-        }
-        else if (accessType == Instruction.AccessType.WR)
-        {
-            writes.push(new MemoryPair(address, memoryValue));
-            memory.put(address, value);
-        }
-    }
-
-    public void undoWrite()
-    {
-        MemoryPair pair = writes.pop();
-        checkAddress(pair.address());
-
-        memory.put(pair.address(), pair.value());
     }
 
     public long read(long address)
@@ -100,13 +57,40 @@ public class Memory
         if (!memory.containsKey(address))
             memory.put(address, 0L);
 
-        long memoryValue = memory.get(address);
-        writes.push(new MemoryPair(address, memoryValue));
         memory.put(address, value);
     }
 
     public void execute(long address)
     {
         checkAddress(address);
+    }
+
+    private TreeMap<Long, Long> remap(long startAddress, SortedMap<Long, Long> block, boolean absolute)
+    {
+        TreeMap<Long, Long> remapped = new TreeMap<>();
+
+        for (Long address: block.keySet())
+        {
+            long newAddress;
+            if (absolute)
+                newAddress = startAddress + address;
+            else
+                newAddress = address - startAddress;
+
+            remapped.put(newAddress, block.get(address));
+        }
+
+        return remapped;
+    }
+
+    public SortedMap<Long, Long> readBlock(long address, long size)
+    {
+        return remap(address, memory.subMap(address, address + size), false);
+    }
+
+    public void writeBlock(long address, SortedMap<Long, Long> block)
+    {
+        block = remap(address, block, true);
+        memory.putAll(block);
     }
 }

@@ -33,12 +33,15 @@ public class SimulationConfig
     private TranslationType translationType = TranslationType.PAGED;
     private TLBType tlbType = TLBType.ASSOCIATIVE;
 
+    private int addressableUnit = 1; 
     private int physicalAddressBits = -1;
     private int numberOfUsers = -1;
 
     private int wordBits = -1;
     private int pageBits = -1;
     private int segmentBits = -1;
+
+    private int diskBits = 32;
 
     private int tlbSize = -1;
     private int tlbEntriesPerSet = -1;
@@ -154,6 +157,19 @@ public class SimulationConfig
         return bitsWidth;
     }
 
+    public int getAddressableUnit() {
+        return addressableUnit;
+    }
+
+    public void setAddressableUnit(int addressableUnit) {
+        this.addressableUnit = addressableUnit;
+    }
+
+    public int getDiskBits()
+    {
+        return diskBits;
+    }
+
     public long getVirtualMemorySize()
     {
         return 1 << getVirtualMemoryBits();
@@ -249,9 +265,9 @@ public class SimulationConfig
         StringBuilder sb = new StringBuilder();
         sb.append(String.format(
             "SimulationConfig[translationType=%s, tlbType=%s, physicalAddressBits=%d, numberOfUsers=%d, "
-            + "wordBits=%d, pageBits=%d, segmentBits=%d, tlbSize=%d, tlbEntriesPerSet=%d]",
+            + "wordBits=%d, pageBits=%d, segmentBits=%d, tlbSize=%d, tlbEntriesPerSet=%d, addressableUnit=%d]",
             translationType, tlbType, physicalAddressBits, numberOfUsers,
-            wordBits, pageBits, segmentBits, tlbSize, tlbEntriesPerSet));
+            wordBits, pageBits, segmentBits, tlbSize, tlbEntriesPerSet, addressableUnit));
 
         int count = instructions == null ? 0 : instructions.size();
         sb.append("\nInstructions (").append(count).append("):");
@@ -273,13 +289,13 @@ public class SimulationConfig
         return sb.toString();
     }
 
-    public ArrayList<MemoryInitializationBlock> getMemoryInit() {
+    /*public ArrayList<MemoryInitializationBlock> getMemoryInit() {
         return memoryInit;
     }
 
     public void setMemoryInit(ArrayList<MemoryInitializationBlock> memoryInit) {
         this.memoryInit = memoryInit;
-    }
+    }*/
 
     public Map<Integer, Map<Long, PageTableDescriptorInit>> getPageTables() {
         return pageTables;

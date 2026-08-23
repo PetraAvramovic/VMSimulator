@@ -10,7 +10,7 @@ public class Simulation<T extends SimulationContext>
    
     private Stack<SimulationStep<T>> stepHistory = new Stack<>();
     private SimulationStep<T> currentStep = null;
-    private int currentStepNum = -1;
+    private int currentStepNum = 0;
         
 
     public Simulation(T context) 
@@ -23,6 +23,20 @@ public class Simulation<T extends SimulationContext>
         stepHistory.clear();
         context.init();
         
+    }
+
+    public void nextStep()
+    {
+        stepHistory.push(currentStep);
+        currentStep = currentStep.execute();
+        currentStepNum++;
+    }
+
+    public void previousStep()
+    {
+        currentStep = stepHistory.pop();
+        currentStep.undo();
+        currentStepNum--;
     }
     
 }

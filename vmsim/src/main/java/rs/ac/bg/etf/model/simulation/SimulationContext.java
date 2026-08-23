@@ -2,8 +2,9 @@ package rs.ac.bg.etf.model.simulation;
 
 import java.util.ArrayList;
 
+import rs.ac.bg.etf.model.disk.Disk;
+import rs.ac.bg.etf.model.disk.DiskAddressGenerator;
 import rs.ac.bg.etf.model.memory.*;
-import rs.ac.bg.etf.model.table.DiskAddressGenerator;
 import rs.ac.bg.etf.model.tlb.AssociativeTLB;
 import rs.ac.bg.etf.model.tlb.DirectTLB;
 import rs.ac.bg.etf.model.tlb.SetAssociativeTLB;
@@ -15,6 +16,7 @@ public abstract class SimulationContext
     protected DiskAddressGenerator diskAddressGenerator;
     protected int numberOfUsers;
     protected TLB tlb;
+    protected Disk disk;
 
     private Memory memory;
     private ArrayList<Instruction> instructions;
@@ -75,9 +77,14 @@ public abstract class SimulationContext
         return config.getWordBits();
     }
 
-    public int getAddressBits()
+    public int getVirtualAddressBits()
     {
         return config.getVirtualMemoryBits() - config.getWordBits();
+    }
+
+    public int getAddressableUnit()
+    {
+        return config.getAddressableUnit();
     }
 
     public long getWordComponent()
@@ -108,6 +115,11 @@ public abstract class SimulationContext
     public Memory getMemory() 
     {
         return memory;
+    }
+
+    public Disk getDisk()
+    {
+        return disk;
     }
 
     @Override

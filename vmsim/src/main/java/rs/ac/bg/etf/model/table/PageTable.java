@@ -3,6 +3,7 @@ package rs.ac.bg.etf.model.table;
 import java.util.HashMap;
 import java.util.Map;
 
+import rs.ac.bg.etf.model.disk.DiskAddressGenerator;
 import rs.ac.bg.etf.model.simulation.SimulationConfig;
 
 public class PageTable 
@@ -49,6 +50,7 @@ public class PageTable
         {
             entry = new PageTableDescriptor(false, false, 0, 0);
             entry.setDisk(diskAddressGenerator.getDiskAddress((user << maxPages) + page));
+            entries.put(page, entry);
         }
 
         return entry;
