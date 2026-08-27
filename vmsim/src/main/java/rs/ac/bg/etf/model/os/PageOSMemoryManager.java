@@ -2,7 +2,7 @@ package rs.ac.bg.etf.model.os;
 
 import java.util.HashMap;
 import java.util.HashSet;
-
+import java.util.Map;
 
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
@@ -17,6 +17,19 @@ public class PageOSMemoryManager extends OSMemoryManager
     public PageOSMemoryManager(EvictionPolicy evictionPolicy, int numberOfUsers, long physicalAddressBits, long wordBits) {
         super(evictionPolicy, numberOfUsers);
         this.maxFrames = 1 << (physicalAddressBits - wordBits);
+    }
+
+    public void init(Map<PageTableDescriptor, Integer> descriptors)
+    {
+        allocatedFrames.clear();
+        lockedFrames.clear();
+        
+        for (PageTableDescriptor descriptor: descriptors.keySet())
+        {
+            int user = descriptors.get(descriptor);
+
+            allocatedFrames.put(descriptor.getBlock(), new FrameMapping(user, descriptor.getPage(), descriptor));
+        }
     }
 
     public long getFreeFrame() 
@@ -68,25 +81,39 @@ public class PageOSMemoryManager extends OSMemoryManager
         return allocatedFrames.get(frame);
     }
 
-    public long allocateAndLock()
+    public long allocateAndLock(long frames)
     {
         if (allocatedFrames.size() == maxFrames)
             throw new RuntimeException("More frames needed to allocate kernel structures");
         
-        long frame = -1;
-
-        for (long i = 0; i < maxFrames; i++)
+        for (long i = 0; i < maxFrames - frames; i++)
         {
-            if (!allocatedFrames.containsKey(i))
+            boolean found = true;
+
+            for (long j = 0; j < frames; j++) 
             {
-                frame = i;
-                break;
+                if (allocatedFrames.containsKey(i + j)) 
+                {
+                    found = false;
+                    i = i + j; 
+                    break;
+                }
+            }
+
+            if (found)
+            {
+                for (long j = 0; j < frames; j++) 
+                {
+                    long currentFrame = i + j;
+                    allocatedFrames.put(currentFrame, null);
+                    lockedFrames.add(currentFrame);
+                }
+
+                
+                return i; 
             }
         }
 
-        allocatedFrames.put(frame, null);
-        lockedFrames.add(frame);
-
-        return frame;
+        throw new RuntimeException("External Fragmentation Error: Not enough consecutive free frames available to allocate kernel structures.");
     }
 }

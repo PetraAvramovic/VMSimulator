@@ -35,7 +35,7 @@ public class App extends Application {
         try {
             config.validateConfig();
         } catch (InvalidConfig e) {
-            // TODO Auto-generated catch block
+          
             e.printStackTrace();
         }
 

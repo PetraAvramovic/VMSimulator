@@ -9,9 +9,9 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
     private PageTableDescriptor descriptor;
     private long previousPhysicalAddress;
 
-    protected FormPhysicalAddressFromPageTableStep(T context, PageTableDescriptor descriptor) {
+    protected FormPhysicalAddressFromPageTableStep(T context, PageTableDescriptor descriptor) 
+    {
         super(context);
-
     }
     @Override
     public SimulationStep<T> execute() 
@@ -26,7 +26,7 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
         context.setCurrentPhysicalAddress(physicalAddress);
         context.getCurrentInstruction().setPhysicalAddress(physicalAddress);
         
-        return new PageMemoryAccessStep<T>(context);
+        return new PageTLBUpdateStep<T>(context, descriptor);
     }
     @Override
     public void undo() 

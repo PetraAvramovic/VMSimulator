@@ -33,9 +33,20 @@ public class DirectTLB extends TLB
     }
     
     @Override
-    public void insert(TLBEntry entry)
+    public TLBEntry insert(TLBEntry entry)
     {
-        entries.set(indexFor(entry.getTag()), entry);
+        int index = indexFor(entry.getTag());
+        TLBEntry evicted = entries.get(index);
+        entries.set(index, entry);
+        pushInsertion(evicted, entry, index);
+        return evicted;
+    }
+    
+    @Override
+    protected void undoInsertionInternal(InsertionRecord record)
+    {
+        // Restore the evicted entry (might be null for empty slot)
+        entries.set(record.position, record.evictedEntry);
     }
     
     @Override

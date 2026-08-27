@@ -8,6 +8,11 @@ public class Disk
 {
     private HashMap<Long, SortedMap<Long, Long>> blocks = new HashMap<>(); 
 
+    public void init(HashMap<Long, SortedMap<Long, Long>> diskInit)
+    {
+        
+    }
+
     public SortedMap<Long, Long> readBlock(long address)
     {
         return new TreeMap<>(blocks.getOrDefault(address, new TreeMap<>()));

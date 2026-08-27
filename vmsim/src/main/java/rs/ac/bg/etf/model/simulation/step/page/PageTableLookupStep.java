@@ -1,6 +1,7 @@
 package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.memory.Instruction;
+import rs.ac.bg.etf.model.memory.Instruction.AccessType;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.table.PageTable;
@@ -23,7 +24,7 @@ public class PageTableLookupStep<T extends PageSimulationContext> extends Simula
         PageTableDescriptor desc = pageTable.getEntry(context.getPageComponent());
 
         if (desc.isValid())
-            if (desc.isDirty())
+            if (!desc.isDirty() && currentInstruction.getAccessType() == AccessType.WR)
                 return new PageTableUpdateDirtyBitStep<T>(context, desc);
             else
                 return new FormPhysicalAddressFromPageTableStep<T>(context, desc);
@@ -36,8 +37,5 @@ public class PageTableLookupStep<T extends PageSimulationContext> extends Simula
     {
         
     }
-       
-
-    
 
 }

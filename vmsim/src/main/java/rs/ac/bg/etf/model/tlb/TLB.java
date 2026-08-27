@@ -27,11 +27,36 @@ public abstract class TLB
             this.position = position;
         }
     }
+    
+    /**
+     * Record of an insertion that caused eviction, for undo support.
+     */
+    protected static class InsertionRecord
+    {
+        public final TLBEntry evictedEntry; // null if no eviction occurred
+        public final TLBEntry insertedEntry;
+        public final int position; // position-specific data
+        public final int secondaryPosition; // for set-associative shift operations
+        
+        public InsertionRecord(TLBEntry evictedEntry, TLBEntry insertedEntry, int position)
+        {
+            this(evictedEntry, insertedEntry, position, -1);
+        }
+        
+        public InsertionRecord(TLBEntry evictedEntry, TLBEntry insertedEntry, int position, int secondaryPosition)
+        {
+            this.evictedEntry = evictedEntry;
+            this.insertedEntry = insertedEntry;
+            this.position = position;
+            this.secondaryPosition = secondaryPosition;
+        }
+    }
     protected int size;
     protected ArrayList<TLBEntry> entries;
     protected int addressBits;
     protected int processBits;
     protected Stack<InvalidationRecord> invalidationStack;
+    protected Stack<InsertionRecord> insertionStack;
     
     public TLB(int size, int addressBits, int processBits)
     {
@@ -40,6 +65,7 @@ public abstract class TLB
         this.addressBits = addressBits;
         this.processBits = processBits;
         this.invalidationStack = new Stack<>();
+        this.insertionStack = new Stack<>();
     }
     
     /**
@@ -52,8 +78,9 @@ public abstract class TLB
     /**
      * Inserts a new entry, replacing an existing one if the TLB (or relevant slot/set) is full.
      * @param entry The entry to insert
+     * @return The evicted entry if eviction occurred, null otherwise
      */
-    public abstract void insert(TLBEntry entry);
+    public abstract TLBEntry insert(TLBEntry entry);
     
     /**
      * Invalidates the entry with the matching tag, if present.
@@ -68,6 +95,13 @@ public abstract class TLB
      * @param record The invalidation record containing the entry and its original position
      */
     protected abstract void restoreInvalidatedEntry(InvalidationRecord record);
+    
+    /**
+     * Removes an inserted entry and optionally restores an evicted entry.
+     * Called by undoInsertion to undo insertions.
+     * @param record The insertion record containing evicted and inserted entries with positions
+     */
+    protected abstract void undoInsertionInternal(InsertionRecord record);
     
     /**
      * Undoes the last invalidation by popping from the invalidation stack and restoring.
@@ -85,6 +119,21 @@ public abstract class TLB
     }
     
     /**
+     * Undoes the last insertion by popping from the insertion stack and reversing the operation.
+     * @return true if an undo was performed, false if the stack was empty
+     */
+    public boolean undoInsertion()
+    {
+        if (insertionStack.isEmpty())
+        {
+            return false;
+        }
+        InsertionRecord record = insertionStack.pop();
+        undoInsertionInternal(record);
+        return true;
+    }
+    
+    /**
      * Protected helper to push an invalidated entry onto the undo stack with its position.
      * Called by subclasses in their invalidateEntry implementations.
      * @param entry The entry that was invalidated
@@ -96,6 +145,29 @@ public abstract class TLB
         {
             invalidationStack.push(new InvalidationRecord(entry, position));
         }
+    }
+    
+    /**
+     * Protected helper to push an insertion record with eviction info onto the undo stack.
+     * @param evictedEntry The entry that was evicted (null if no eviction)
+     * @param insertedEntry The entry that was inserted
+     * @param position Position info for restoration
+     */
+    protected void pushInsertion(TLBEntry evictedEntry, TLBEntry insertedEntry, int position)
+    {
+        insertionStack.push(new InsertionRecord(evictedEntry, insertedEntry, position));
+    }
+    
+    /**
+     * Protected helper to push an insertion record with additional position info (for set-associative).
+     * @param evictedEntry The entry that was evicted (null if no eviction)
+     * @param insertedEntry The entry that was inserted
+     * @param position Primary position info for restoration
+     * @param secondaryPosition Secondary position info (e.g., set start for set-associative)
+     */
+    protected void pushInsertion(TLBEntry evictedEntry, TLBEntry insertedEntry, int position, int secondaryPosition)
+    {
+        insertionStack.push(new InsertionRecord(evictedEntry, insertedEntry, position, secondaryPosition));
     }
     
     /**

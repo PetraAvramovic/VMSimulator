@@ -1,9 +1,7 @@
 package rs.ac.bg.etf.model.memory;
 
 import rs.ac.bg.etf.model.memory.exceptions.*;
-import rs.ac.bg.etf.model.simulation.SimulationConfig;
 
-import java.util.ArrayList;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
@@ -18,20 +16,13 @@ public class Memory
         this.memorySize = memorySize;
     }
 
-    public void init(ArrayList<SimulationConfig.MemoryInitializationBlock> memoryInit)
+    public void init(SortedMap<Long,Long> memoryInit)
     {
         if (memoryInit == null)
             return;
 
-        for (SimulationConfig.MemoryInitializationBlock block : memoryInit)
-        {
-            long address = block.startAddress();
-            for (Long value : block.data())
-            {
-                memory.put(address, value);
-                address++;
-            }
-        }
+        memory.clear();
+        memory.putAll(memoryInit);
     }
 
     private void checkAddress(long address)

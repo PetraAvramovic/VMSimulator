@@ -1,7 +1,11 @@
 package rs.ac.bg.etf.model.simulation;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
+import rs.ac.bg.etf.model.os.FIFOEvictionPolicy;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.table.PageTable;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
@@ -9,6 +13,7 @@ import rs.ac.bg.etf.model.table.PageTableDescriptor;
 public class PageSimulationContext extends SimulationContext
 {
     private ArrayList<PageTable> pageTables = new ArrayList<>();
+    private ArrayList<Long> pageTableStartAddresses = new ArrayList<>();
     private long maxPages;
     private PageOSMemoryManager memoryManager;
 
@@ -26,12 +31,52 @@ public class PageSimulationContext extends SimulationContext
 
         maxPages = 1l << config.getPageBits(); 
 
+        memoryManager = new PageOSMemoryManager(new FIFOEvictionPolicy(), numberOfUsers, config.getPhysicalAddressBits(), config.getWordBits());
+        long pageTableSize = getPageTableDescriptorSize() * maxPages;
+        long pagesPerPageTable = pageTableSize / getPageSize();
+
+        HashMap<PageTableDescriptor, Integer> frameInit = new HashMap<>();
+
         for (int i = 0; i < numberOfUsers; i++)
         {
             PageTable table = new PageTable(diskAddressGenerator, i, maxPages);
             table.init(config.getPageTables().get(i));
             pageTables.add(table);
+
+            ArrayList<PageTableDescriptor> validEntries = table.getValidEntries();
+
+            for (PageTableDescriptor entry: validEntries)
+                frameInit.put(entry, i);
         }
+
+        memoryManager.init(frameInit);
+
+        for (int i = 0; i < numberOfUsers; i++)
+        {
+            long startAddress = memoryManager.allocateAndLock(pagesPerPageTable) << config.getWordBits();
+            pageTableStartAddresses.add(startAddress);
+        }
+
+        initDisk();
+    }
+
+    @Override
+    protected void initDisk() 
+    {
+        HashMap<String, SortedMap<Long, Long>> diskInitConfig = config.getDiskInitContent();
+
+        HashMap<Long, SortedMap<Long, Long>> diskInit = new HashMap<>();
+
+        for (String key: diskInitConfig.keySet())
+        {
+            String[] values = key.split(":");
+            int user = Integer.parseInt(values[0]);
+            long page = Long.parseLong(values[1]);
+
+            diskInit.put(diskAddressGenerator.getDiskAddress((user << maxPages) + page), diskInitConfig.get(key));
+        }
+
+        disk.init(diskInit);
     }
 
     public PageTableDescriptor getCurrentDescriptor() 
@@ -39,7 +84,8 @@ public class PageSimulationContext extends SimulationContext
         return currentDescriptor;
     }
 
-    public void setCurrentDescriptor(PageTableDescriptor currentDescriptor) {
+    public void setCurrentDescriptor(PageTableDescriptor currentDescriptor)
+     {
         this.currentDescriptor = currentDescriptor;
     }
 

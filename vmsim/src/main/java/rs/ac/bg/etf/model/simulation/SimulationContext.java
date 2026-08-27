@@ -23,14 +23,6 @@ public abstract class SimulationContext
     private int currentInstructionInd = -1;
     private long currentPhysicalAddress = -1;
 
-    public long getCurrentPhysicalAddress() {
-        return currentPhysicalAddress;
-    }
-
-    public void setCurrentPhysicalAddress(long currentPhysicalAddress) {
-        this.currentPhysicalAddress = currentPhysicalAddress;
-    }
-
     public SimulationContext(SimulationConfig config) 
     {
         this.config = config;
@@ -42,6 +34,9 @@ public abstract class SimulationContext
         memory = new Memory(config.getMemorySize());
         instructions = config.getInstructions();
         diskAddressGenerator = new DiskAddressGenerator(config.generateDiskSeed());
+        disk = new Disk();
+
+        memory.init(config.getMemoryInit());
         initTLB();
     }
 
@@ -66,6 +61,17 @@ public abstract class SimulationContext
         }
 
     }
+
+    protected abstract void initDisk();
+
+    public long getCurrentPhysicalAddress() {
+        return currentPhysicalAddress;
+    }
+
+    public void setCurrentPhysicalAddress(long currentPhysicalAddress) {
+        this.currentPhysicalAddress = currentPhysicalAddress;
+    }
+
     
     public TLB getTLB()
     {

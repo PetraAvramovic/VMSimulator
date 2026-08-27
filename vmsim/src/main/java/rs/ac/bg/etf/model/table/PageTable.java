@@ -1,5 +1,6 @@
 package rs.ac.bg.etf.model.table;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -12,12 +13,15 @@ public class PageTable
     private DiskAddressGenerator diskAddressGenerator;
     private int user;
     private long maxPages;
+    //private long startAddress;
+    //private int descriptorSize;
 
-    public PageTable(DiskAddressGenerator diskAddressGenerator, int user, long maxPages) 
+    public PageTable(DiskAddressGenerator diskAddressGenerator, int user, long maxPages/*, long startAddress*/) 
     {
         this.diskAddressGenerator = diskAddressGenerator;
         this.user = user;
         this.maxPages = maxPages;
+        //this.startAddress = startAddress;
     }
 
     public void init(Map<Long, SimulationConfig.PageTableDescriptorInit> pageTableInit)
@@ -35,7 +39,8 @@ public class PageTable
                 initData.valid(),
                 initData.dirty(),
                 initData.block(),
-                disk
+                disk,
+                page
             );
 
             entries.put(page, descriptor);
@@ -48,12 +53,25 @@ public class PageTable
 
         if (entry == null)
         {
-            entry = new PageTableDescriptor(false, false, 0, 0);
-            entry.setDisk(diskAddressGenerator.getDiskAddress((user << maxPages) + page));
+            entry = new PageTableDescriptor(false, false, 0, diskAddressGenerator.getDiskAddress((user << maxPages) + page), page);
             entries.put(page, entry);
         }
 
         return entry;
+    }
+
+    public ArrayList<PageTableDescriptor> getValidEntries()
+    {
+        ArrayList<PageTableDescriptor> validEntries = new ArrayList<>();
+
+        for (Long page: entries.keySet())
+        {
+            PageTableDescriptor descriptor = entries.get(page);
+            if (descriptor.isValid())
+                validEntries.add(descriptor);
+        }
+
+        return validEntries;
     }
 
     @Override
@@ -71,7 +89,7 @@ public class PageTable
             if (entry == null)
             {
                 entry = new PageTableDescriptor(false, false, 0,
-                    diskAddressGenerator.getDiskAddress((user << maxPages) + page));
+                    diskAddressGenerator.getDiskAddress((user << maxPages) + page), page);
             }
 
             sb.append(String.format("  [%d]: %s%n", page, entry.toString()));

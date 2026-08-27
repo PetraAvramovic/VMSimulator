@@ -8,7 +8,7 @@ public class TLBEntry
     private boolean valid;
     private boolean dirty;
     private long tag;
-    private int block;        // Physical frame number (for paging and segment-paging modes)
+    private long block;        // Physical frame number (for paging and segment-paging modes)
     private int rwe;          // Read/Write/Execute permissions (for segmentation and segment-paging modes)
     private int length;       // Segment length (for segmentation mode)
     private int startAddr;    // Segment start address (for segmentation mode)
@@ -29,9 +29,9 @@ public class TLBEntry
         this(tag, valid, dirty, 0, 0, 0, 0);
     }
     
-    public TLBEntry(long tag, boolean valid, boolean dirty, int block)
+    public TLBEntry(long tag, boolean valid, boolean dirty, long block)
     {
-        this(tag, valid, dirty, block, 0, 0, 0);
+        this(tag, valid, dirty, 0, block, 0, 0);
     }
     
     public TLBEntry(long tag, boolean valid, boolean dirty, int rwe, int length, int startAddr)
@@ -39,7 +39,7 @@ public class TLBEntry
         this(tag, valid, dirty, 0, rwe, length, startAddr);
     }
     
-    public TLBEntry(long tag, boolean valid, boolean dirty, int rwe, int block, int length, int startAddr)
+    public TLBEntry(long tag, boolean valid, boolean dirty, int rwe, long block, int length, int startAddr)
     {
         this.tag = tag;
         this.valid = valid;
@@ -82,12 +82,12 @@ public class TLBEntry
     }
     
     // Paging mode getters and setters
-    public int getBlock()
+    public long getBlock()
     {
         return block;
     }
     
-    public void setBlock(int block)
+    public void setBlock(long block)
     {
         this.block = block;
     }

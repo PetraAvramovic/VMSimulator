@@ -46,7 +46,7 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
 
         memoryManager.allocate(frame, user, page, descriptor);
 
-        return new PageUpdateTLBStep<T>(context, descriptor);
+        return new FormPhysicalAddressFromPageTableStep<T>(context, descriptor);
     }
 
     @Override
