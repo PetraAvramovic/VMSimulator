@@ -1,0 +1,321 @@
+.root {
+    -fx-font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -fx-background-color: #f8f9fa; /* Crisp, off-white background padding */
+    -fx-text-base-color: #2c3e50;    /* Deep navy tone for main texts */
+}
+
+/* =========================================================================
+   MAIN MENU CONTAINERS & TYPOGRAPHY
+   ========================================================================= */
+.main-menu-container {
+    -fx-alignment: center;
+    -fx-spacing: 20px;
+    -fx-padding: 50px;
+}
+
+.main-menu-title {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+    /* Soft text shadow effect for depth */
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 4, 0.0, 0, 2);
+}
+
+.main-menu-subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: #7f8c8d; /* Muted gray description text */
+    -fx-padding: 0 0 15 0;
+}
+
+/* =========================================================================
+   INTERACTIVE BUTTON COMPONENT STYLING
+   ========================================================================= */
+.button {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+    -fx-pref-width: 240px;
+    -fx-pref-height: 44px;
+    -fx-background-radius: 6px;
+    
+    /* Subtle 1px clean border line ring */
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 6px;
+    
+    /* Flat crisp drop-shadow elevation profile */
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.04), 8, 0.0, 0, 4);
+    
+    /* Smooth CSS rendering transition engine emulation hook */
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #2c3e50;
+}
+
+/* HOVER EFFECT: Brightens button background slightly on cursor over */
+.button:hover {
+    -fx-background-color: #f1f2f6;
+    -fx-border-color: #b5b8c0;
+}
+
+/* PRESSED EFFECT: Creates a subtle mechanical "clicked" push depth */
+.button:armed {
+    -fx-background-color: #e4e7eb;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.06), 2, 0.0, 0, 1);
+}
+
+/* SPECIAL ACTION CLASS: Highlights the primary launcher choice in bright accent blue */
+.button-primary {
+    -fx-background-color: #3498db;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #2980b9;
+}
+
+.button-primary:hover {
+    -fx-background-color: #2980b9;
+    -fx-border-color: #2471a3;
+}
+
+.error-banner-label {
+    -fx-text-fill: #e74c3c;     /* Sharp error-red tone */
+    -fx-font-weight: bold;      /* Heavy emphasis alignment */
+    -fx-font-size: 13px;
+    -fx-padding: 5px 0 5px 0;   /* Vertical padding spacing cushion */
+}
+
+
+/* Base grid layout matrices spacing parameters */
+.form-grid-base {
+    -fx-hgap: 15px;
+    -fx-vgap: 12px;
+    -fx-padding: 10px 0 10px 0;
+}
+
+/* Individual form labels padding */
+.form-grid-base .label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #34495e;
+}
+
+/* Elegant borders surrounding our sliding conditional architecture grids panels */
+.architecture-sub-form-box {
+    -fx-hgap: 15px;
+    -fx-vgap: 12px;
+    -fx-padding: 15px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+    -fx-max-width: 520px;
+}
+
+.architecture-sub-form-box .label {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+}
+
+/* Input Fields TextBoxes Visual Polish */
+.text-field {
+    -fx-pref-width: 180px;
+    -fx-pref-height: 32px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 5px;
+}
+
+.text-field:focused {
+    -fx-border-color: #3498db; /* Glows blue on focus */
+    -fx-effect: dropshadow(three-pass-box, rgba(52,152,219,0.2), 4, 0, 0, 0);
+}
+
+/* ComboBox Dropdown Selectors Polish */
+.combo-box {
+    -fx-pref-width: 180px;
+    -fx-pref-height: 32px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+}
+
+.combo-box:hover {
+    -fx-border-color: #b5b8c0;
+}
+
+/* Centralized Error Display Output Banner Label */
+.error-banner-label {
+    -fx-text-fill: #e74c3c;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-min-height: 20px;
+    -fx-alignment: center;
+}
+
+/* Column header labels for configuration form */
+.column-header {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+/* =========================================================================
+   SIMULATION WORKBENCH LAYOUT (left/right sidebars + center tab pane)
+   ========================================================================= */
+.simulation-container {
+    -fx-background-color: #f8f9fa;
+}
+
+.sidebar-panel {
+    -fx-padding: 15px;
+    -fx-pref-width: 240px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 0 1px 0 1px;
+}
+
+.sidebar-info-label {
+    -fx-font-size: 12px;
+    -fx-text-fill: #7f8c8d;
+}
+
+.tab-placeholder-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #34495e;
+    -fx-padding: 20px;
+    -fx-max-width: 500px;
+}
+
+.step-counter-label {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+
+/* =========================================================================
+   PAGED MMU TAB (address breakdown + windowed page table + connector line)
+   ========================================================================= */
+.mmu-tab-container {
+    -fx-background-color: #f8f9fa;
+}
+
+.va-breakdown-box {
+    -fx-padding: 10px 18px 10px 18px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3498db;
+    -fx-border-width: 2px;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+}
+
+/* Adjacent fields (e.g. Page|Word) rendered as one continuous box: the left cell drops its right
+   border so the two cells share a single divider line instead of a doubled-up border. */
+.va-breakdown-cell {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3498db;
+    -fx-border-width: 2px;
+}
+
+.va-breakdown-cell-left {
+    -fx-border-width: 2px 0 2px 2px;
+    -fx-background-radius: 6px 0 0 6px;
+    -fx-border-radius: 6px 0 0 6px;
+}
+
+.va-breakdown-cell-right {
+    -fx-background-radius: 0 6px 6px 0;
+    -fx-border-radius: 0 6px 6px 0;
+}
+
+.va-breakdown-title {
+    -fx-font-size: 11px;
+    -fx-text-fill: #7f8c8d;
+    -fx-font-weight: bold;
+}
+
+.va-breakdown-value {
+    -fx-font-family: "Consolas", "Monospaced";
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+}
+
+.page-table-view {
+    -fx-padding: 10px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+}
+
+.page-table-header .page-table-cell {
+    -fx-font-weight: bold;
+    -fx-text-fill: #7f8c8d;
+    -fx-font-size: 12px;
+}
+
+.page-table-row {
+    -fx-padding: 4px 0 4px 0;
+    -fx-border-color: transparent transparent #f1f2f6 transparent;
+    -fx-border-width: 1px;
+}
+
+.page-table-row-current {
+    -fx-background-color: #eaf4fc;
+    -fx-border-color: #3498db;
+    -fx-border-width: 1px;
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+}
+
+.page-table-cell {
+    -fx-font-family: "Consolas", "Monospaced";
+    -fx-font-size: 13px;
+    -fx-text-fill: #2c3e50;
+xt-fill: #9aa1a7;
+    -fx-font-weight: bold;
+}
+
+.connector-line {
+    -fx-stroke: #9d9fa1;      
+    -fx-stroke-width: 1.5px;
+    -fx-fill: transparent;
+}
+
+.connector-line:active {
+    -fx-stroke: #3498db;      /* Rich glowing blue accent when active */
+    -fx-stroke-width: 2.0px;  /* Slightly thicker line gives a nice signal pulse */
+}
+
+.mmu-bit-width {
+    -fx-font-family: "Consolas", "Monospaced", monospace; /* Strictly forces a monospace layout */
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #7f8c8d;    /* Slate gray typography color */
+}
+
+.mmu-bit-value {
+    -fx-font-family: "Consolas", "Monospaced", monospace; /* Strictly forces a monospace layout */
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #7f8c8d;    /* Slate gray typography color */
+}
+
+
+.mmu-bit-value:active {
+    -fx-text-fill: #3498db;
+}
+
+.mmu-adder-circle {
+    -fx-fill: #ffffff;
+    -fx-stroke: #3498db;
+    -fx-stroke-width: 2px;
+}
+
+.mmu-adder-label {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-text-fill: #3498db;
+}

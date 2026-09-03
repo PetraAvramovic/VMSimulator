@@ -6,7 +6,7 @@ import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 
 public class PageInstructionFetchStep<T extends PageSimulationContext> extends InstructionFetchStep<T> {
 
-    protected PageInstructionFetchStep(T context) 
+    public PageInstructionFetchStep(T context) 
     {
         super(context);
     }
@@ -16,5 +16,6 @@ public class PageInstructionFetchStep<T extends PageSimulationContext> extends I
     {
         return new PageTLBLookupStep<T>(context);
     }
+
 
 }

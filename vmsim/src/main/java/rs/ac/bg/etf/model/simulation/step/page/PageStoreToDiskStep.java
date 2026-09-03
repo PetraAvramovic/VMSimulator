@@ -44,5 +44,11 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
         descriptor.setDirty(true);
     }
 
+    @Override
+    public String getDescription()
+    {
+        return String.format("Wrote dirty page %d back to disk address 0x%X.", descriptor.getPage(), descriptor.getDisk());
+    }
+
     
 }

@@ -24,7 +24,7 @@ public class PageTLBLookupStep<T extends PageSimulationContext> extends TLBLooku
             else
                 return new PageFormPhysicalAddressFromTLBStep<T>(context, entry);
         else
-            return new PageTableLookupStep<T>(context);
+            return new FormPageTableAddressStep<T>(context);
     }
     
 }

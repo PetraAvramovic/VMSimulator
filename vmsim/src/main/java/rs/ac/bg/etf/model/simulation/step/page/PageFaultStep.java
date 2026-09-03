@@ -35,6 +35,14 @@ public class PageFaultStep<T extends PageSimulationContext> extends SimulationSt
         context.setCurrentDescriptor(null);
     }
 
+    @Override
+    public String getDescription()
+    {
+        return frame == -1
+                ? String.format("Page fault: page %d not valid, no free frames available.", descriptor.getPage())
+                : String.format("Page fault: page %d not valid, loading into free frame 0x%X.", descriptor.getPage(), frame);
+    }
+
     
     
 }

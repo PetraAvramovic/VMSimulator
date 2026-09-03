@@ -59,4 +59,13 @@ public class PageEvictionStep<T extends PageSimulationContext> extends Simulatio
         victimDescriptor.setValid(true);
     }
 
+    @Override
+    public String getDescription()
+    {
+        PageTableDescriptor victimDescriptor = victimFrameMapping.descriptor();
+        return String.format("Evicted frame 0x%X (user %d, page %d)%s.",
+                victimFrame, victimFrameMapping.user(), victimFrameMapping.page(),
+                victimDescriptor.isDirty() ? ", writing back to disk" : "");
+    }
+
 }

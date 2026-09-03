@@ -29,5 +29,11 @@ public abstract class TLBUpdateDirtyBitStep<T extends SimulationContext> extends
         tlbEntry.setDirty(false);
     }
 
+    @Override
+    public String getDescription()
+    {
+        return "Updated dirty bit in existing TLB entry.";
+    }
+
     
 }

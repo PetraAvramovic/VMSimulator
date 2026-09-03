@@ -90,7 +90,7 @@ public class SimulationConfig
         }
     }
 
-    public void validateConfig() throws InvalidConfig
+    public void validate() throws InvalidConfig
     {
         if (physicalAddressBits <= 0)
         {

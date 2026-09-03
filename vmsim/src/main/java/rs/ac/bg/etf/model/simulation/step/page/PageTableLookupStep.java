@@ -9,6 +9,7 @@ import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
 public class PageTableLookupStep<T extends PageSimulationContext> extends SimulationStep<T>
 {
+    private PageTableDescriptor lookupResult;
 
     protected PageTableLookupStep(T context) 
     {
@@ -21,7 +22,8 @@ public class PageTableLookupStep<T extends PageSimulationContext> extends Simula
         Instruction currentInstruction = context.getCurrentInstruction();
         PageTable pageTable = context.getPageTable(currentInstruction.getUser());
 
-        PageTableDescriptor desc = pageTable.getEntry(context.getPageComponent());
+        PageTableDescriptor desc = pageTable.getEntryAndAdd(context.getPageComponent());
+        lookupResult = desc;
 
         if (desc.isValid())
             if (!desc.isDirty() && currentInstruction.getAccessType() == AccessType.WR)
@@ -36,6 +38,16 @@ public class PageTableLookupStep<T extends PageSimulationContext> extends Simula
     public void undo() 
     {
         
+    }
+
+    @Override
+    public String getDescription()
+    {
+        if (!lookupResult.isValid())
+            return String.format("Page table lookup: page %d not valid (page fault).", lookupResult.getPage());
+
+        return String.format("Page table lookup: page %d -> frame 0x%X%s.",
+                lookupResult.getPage(), lookupResult.getBlock(), lookupResult.isDirty() ? " (dirty)" : "");
     }
 
 }

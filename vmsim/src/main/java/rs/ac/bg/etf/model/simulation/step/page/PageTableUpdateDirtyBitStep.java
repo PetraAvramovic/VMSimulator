@@ -28,5 +28,11 @@ public class PageTableUpdateDirtyBitStep<T extends PageSimulationContext> extend
         descriptor.setDirty(false);
     }
 
+    @Override
+    public String getDescription()
+    {
+        return String.format("Set dirty bit for page %d in page table.", descriptor.getPage());
+    }
+
     
 }

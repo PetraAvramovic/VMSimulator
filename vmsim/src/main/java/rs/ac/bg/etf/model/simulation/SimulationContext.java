@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import rs.ac.bg.etf.model.disk.Disk;
 import rs.ac.bg.etf.model.disk.DiskAddressGenerator;
 import rs.ac.bg.etf.model.memory.*;
+import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.tlb.AssociativeTLB;
 import rs.ac.bg.etf.model.tlb.DirectTLB;
 import rs.ac.bg.etf.model.tlb.SetAssociativeTLB;
@@ -64,6 +65,8 @@ public abstract class SimulationContext
 
     protected abstract void initDisk();
 
+    public abstract SimulationStep<? extends SimulationContext> getFirstStep(); 
+
     public long getCurrentPhysicalAddress() {
         return currentPhysicalAddress;
     }
@@ -93,6 +96,16 @@ public abstract class SimulationContext
         return config.getAddressableUnit();
     }
 
+    public int getPhysicalAddressBits()
+    {
+        return config.getPhysicalAddressBits();
+    }
+
+    public int getDiskBits()
+    {
+        return config.getDiskBits();
+    }
+
     public long getWordComponent()
     {
         Instruction instruction = getCurrentInstruction();
@@ -104,6 +117,11 @@ public abstract class SimulationContext
     public Instruction getCurrentInstruction()
     {
         return instructions.get(currentInstructionInd);
+    }
+
+    public boolean hasCurrentInstruction()
+    {
+        return currentInstructionInd >= 0 && currentInstructionInd < instructions.size();
     }
 
     public void nextInstruction()
@@ -126,6 +144,16 @@ public abstract class SimulationContext
     public Disk getDisk()
     {
         return disk;
+    }
+
+    public long getValueAtAddress(long address)
+    {
+        return memory.read(address);
+    }
+
+    public long getPhysicalMemorySize()
+    {
+        return 1L << config.getPhysicalAddressBits();
     }
 
     @Override

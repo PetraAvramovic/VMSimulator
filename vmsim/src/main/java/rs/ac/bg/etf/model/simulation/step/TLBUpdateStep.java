@@ -55,5 +55,16 @@ public abstract class TLBUpdateStep<T extends SimulationContext> extends Simulat
        tlb.undoInsertion();
     }
 
+    @Override
+    public String getDescription()
+    {
+        if (evicted == null)
+            return "Inserted new TLB entry.";
+
+        return wasDirty
+                ? "Inserted new TLB entry (evicted a dirty entry; wrote back to page table)."
+                : "Inserted new TLB entry (evicted an entry).";
+    }
+
     
 }

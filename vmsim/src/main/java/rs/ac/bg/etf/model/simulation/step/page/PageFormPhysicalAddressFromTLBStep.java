@@ -16,7 +16,7 @@ public class PageFormPhysicalAddressFromTLBStep<T extends PageSimulationContext>
     @Override
     public SimulationStep<T> execute() 
     {
-        long physicalAddress = (entry.getBlock() << context.getWordBits()) | context.getWordBits();
+        long physicalAddress = (entry.getBlock() << context.getWordBits()) | context.getWordComponent();
         previousPhysicalAddress = context.getCurrentPhysicalAddress();
         
         context.setCurrentPhysicalAddress(physicalAddress);

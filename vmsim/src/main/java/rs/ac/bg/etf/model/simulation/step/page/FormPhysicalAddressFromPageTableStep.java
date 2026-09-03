@@ -12,6 +12,7 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
     protected FormPhysicalAddressFromPageTableStep(T context, PageTableDescriptor descriptor) 
     {
         super(context);
+        this.descriptor = descriptor;
     }
     @Override
     public SimulationStep<T> execute() 
@@ -33,6 +34,13 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
     {
         context.setCurrentPhysicalAddress(previousPhysicalAddress);
         context.getCurrentInstruction().setPhysicalAddress(-1);
+    }
+
+    @Override
+    public String getDescription()
+    {
+        return String.format("Formed physical address 0x%X from page table (frame 0x%X).",
+                context.getCurrentPhysicalAddress(), descriptor.getBlock());
     }
     
 }

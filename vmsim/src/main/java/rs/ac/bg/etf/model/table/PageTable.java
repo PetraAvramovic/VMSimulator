@@ -47,7 +47,7 @@ public class PageTable
         }
     }
     
-    public PageTableDescriptor getEntry(long page)
+    public PageTableDescriptor getEntryAndAdd(long page)
     {
         PageTableDescriptor entry = entries.get(page);
 
@@ -57,6 +57,16 @@ public class PageTable
             entries.put(page, entry);
         }
 
+        return entry;
+    }
+
+    public PageTableDescriptor getEntry(long page)
+    {
+        PageTableDescriptor entry = entries.get(page);
+
+        if (entry == null)
+            entry = new PageTableDescriptor(false, false, 0, diskAddressGenerator.getDiskAddress((user << maxPages) + page), page);
+    
         return entry;
     }
 

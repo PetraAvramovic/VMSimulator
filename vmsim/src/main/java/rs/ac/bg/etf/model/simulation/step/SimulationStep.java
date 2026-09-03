@@ -13,4 +13,9 @@ public abstract class SimulationStep<T extends SimulationContext>
 
     public abstract SimulationStep<T> execute();
     public abstract void undo();
+
+    /**
+     * Human-readable description of the action this step performed, read after execute() runs.
+     */
+    public abstract String getDescription();
 }

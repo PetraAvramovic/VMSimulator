@@ -21,4 +21,11 @@ public abstract class FormPhysicalAddressFromTLBStep<T extends SimulationContext
         context.setCurrentPhysicalAddress(previousPhysicalAddress);
         context.getCurrentInstruction().setPhysicalAddress(-1);
     }
+
+    @Override
+    public String getDescription()
+    {
+        return String.format("Formed physical address 0x%X from TLB entry (frame 0x%X).",
+                context.getCurrentPhysicalAddress(), entry.getBlock());
+    }
 }

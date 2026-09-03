@@ -64,4 +64,18 @@ public abstract class MemoryAccessStep<T extends SimulationContext> extends Simu
                 break;
         }
     }
+
+    @Override
+    public String getDescription()
+    {
+        Instruction currentInstruction = context.getCurrentInstruction();
+        long address = currentInstruction.getPhysicalAddress();
+
+        return switch (currentInstruction.getAccessType())
+        {
+            case RD -> String.format("Read value 0x%X from physical address 0x%X.", currentInstruction.getValue(), address);
+            case WR -> String.format("Wrote value 0x%X to physical address 0x%X.", currentInstruction.getValue(), address);
+            case EX -> String.format("Executed instruction at physical address 0x%X.", address);
+        };
+    }
 }

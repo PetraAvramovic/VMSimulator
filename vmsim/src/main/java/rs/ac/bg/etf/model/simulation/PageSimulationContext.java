@@ -3,10 +3,11 @@ package rs.ac.bg.etf.model.simulation;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.SortedMap;
-import java.util.TreeMap;
 
 import rs.ac.bg.etf.model.os.FIFOEvictionPolicy;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
+import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.page.PageInstructionFetchStep;
 import rs.ac.bg.etf.model.table.PageTable;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
@@ -15,7 +16,9 @@ public class PageSimulationContext extends SimulationContext
     private ArrayList<PageTable> pageTables = new ArrayList<>();
     private ArrayList<Long> pageTableStartAddresses = new ArrayList<>();
     private long maxPages;
+    private long pageTableSize;
     private PageOSMemoryManager memoryManager;
+    private long currentDescriptorAddress = 0;
 
     private PageTableDescriptor currentDescriptor = null;
 
@@ -32,8 +35,10 @@ public class PageSimulationContext extends SimulationContext
         maxPages = 1l << config.getPageBits(); 
 
         memoryManager = new PageOSMemoryManager(new FIFOEvictionPolicy(), numberOfUsers, config.getPhysicalAddressBits(), config.getWordBits());
-        long pageTableSize = getPageTableDescriptorSize() * maxPages;
-        long pagesPerPageTable = pageTableSize / getPageSize();
+        pageTableSize = getPageTableDescriptorSize() * maxPages;
+        long pagesPerPageTable = Math.ceilDiv(pageTableSize, getPageSize());
+
+        System.out.println(pagesPerPageTable);
 
         HashMap<PageTableDescriptor, Integer> frameInit = new HashMap<>();
 
@@ -79,9 +84,90 @@ public class PageSimulationContext extends SimulationContext
         disk.init(diskInit);
     }
 
+    @Override
+    public SimulationStep<? extends SimulationContext> getFirstStep() {
+        return new PageInstructionFetchStep<PageSimulationContext>(this);
+    }
+
+    @Override
+    public long getValueAtAddress(long address)
+    {
+        int user = checkIfAddressReferencesPageTable(address);
+
+        if (user == -1)
+        {
+            return super.getValueAtAddress(address);
+        }
+        else
+        {
+            long descriptorIndex = (address - pageTableStartAddresses.get(user)) / getPageTableDescriptorSize();
+            int unitIndex = (int)((address - pageTableStartAddresses.get(user)) % getPageTableDescriptorSize());
+
+            long[] memoryRepresentation = getDescriptorMemoryRepresentation(pageTables.get(user).getEntryAndAdd(descriptorIndex));
+
+            return memoryRepresentation[unitIndex];
+        }
+    }
+
+    private int checkIfAddressReferencesPageTable(long address)
+    {
+        for (int i = 0; i < numberOfUsers; i++)
+        {
+            if (Long.compareUnsigned(address, pageTableStartAddresses.get(i)) >= 0 && Long.compareUnsigned(address, pageTableStartAddresses.get(i) + pageTableSize) < 0)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private long[] getDescriptorMemoryRepresentation(PageTableDescriptor descriptor)
+    {
+        int bitsPreUnit = config.getAddressableUnit() * 8;
+        int frameBits = config.getPhysicalAddressBits() - config.getWordBits();
+        int descriptorSize = getPageTableDescriptorSize();
+
+        int vBit = descriptor.isValid() ? 1 : 0;
+        int dBit = descriptor.isDirty() ? 1 : 0;
+        long block = descriptor.getBlock();
+        long disk = descriptor.getDisk();
+
+        long[] memoryCells = new long[descriptorSize];
+
+        long unifiedValue = (disk << (2 + frameBits)) | (block << 2) | (dBit << 1) | vBit;
+
+        long unitBitMask = (1L << bitsPreUnit) - 1;
+
+        for (int i = 0; i < descriptorSize; i++)
+        {
+            memoryCells[i] = (unifiedValue >>> (i * bitsPreUnit)) & unitBitMask;
+        }
+
+        return memoryCells;
+    }
+
+    public long getCurrentPTP()
+    {
+        return pageTableStartAddresses.get(getCurrentInstruction().getUser());
+    }
+
     public PageTableDescriptor getCurrentDescriptor() 
     {
         return currentDescriptor;
+    }
+
+    public long getCurrentDescriptorOffset() 
+    {
+        long page = getPageComponent();
+
+        return page << (31 - Integer.numberOfLeadingZeros(getPageTableDescriptorSize()));
+    }
+
+    public long getCurrentDescriptorAddress() {
+        return currentDescriptorAddress;
+    }
+
+    public void setCurrentDescriptorAddress(long currentDescriptorAddress) {
+        this.currentDescriptorAddress = currentDescriptorAddress;
     }
 
     public void setCurrentDescriptor(PageTableDescriptor currentDescriptor)
@@ -92,6 +178,16 @@ public class PageSimulationContext extends SimulationContext
     public PageTable getPageTable(int user)
     {
         return pageTables.get(user);
+    }
+
+    public long getMaxPages()
+    {
+        return maxPages;
+    }
+
+    public long getPageTableStartAddress(int user)
+    {
+        return pageTableStartAddresses.get(user);
     }
 
     public long getPageComponent()
@@ -105,7 +201,12 @@ public class PageSimulationContext extends SimulationContext
     {
         int descriptorBits = 2 + config.getPhysicalAddressBits() - config.getWordBits() + config.getDiskBits();
         int addressableUnit = config.getAddressableUnit();
-        return Math.ceilDiv(descriptorBits, addressableUnit * 8);
+        int unitSize = Math.ceilDiv(descriptorBits, addressableUnit * 8);
+
+        if ((unitSize & (unitSize - 1)) == 0)
+            return unitSize;
+
+        return Integer.highestOneBit(unitSize) << 1;
     }
 
     public long getPageSize()
@@ -133,10 +234,15 @@ public class PageSimulationContext extends SimulationContext
             sb.append(String.format("%n  PageTables (%d):", pageTables.size()));
             for (int i = 0; i < pageTables.size(); i++)
             {
-                sb.append(String.format("%n    [%d]: %s", i, pageTables.get(i).toString()));
+                long startAddress = i < pageTableStartAddresses.size() ? pageTableStartAddresses.get(i) : -1;
+                sb.append(String.format("%n    [%d] (startAddress=0x%x): %s", i, startAddress, pageTables.get(i).toString()));
             }
         }
         
         return sb.toString();
     }
+
+    
+
+    
 }

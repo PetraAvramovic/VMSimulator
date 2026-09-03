@@ -65,5 +65,12 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
         memoryManager.undoAllocation(frame);
     }
 
+    @Override
+    public String getDescription()
+    {
+        PageTableDescriptor descriptor = context.getCurrentDescriptor();
+        return String.format("Loaded page %d from disk into frame 0x%X.", descriptor.getPage(), frame);
+    }
+
     
 }
