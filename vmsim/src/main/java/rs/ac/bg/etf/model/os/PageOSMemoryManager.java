@@ -2,6 +2,7 @@ package rs.ac.bg.etf.model.os;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
@@ -79,6 +80,23 @@ public class PageOSMemoryManager extends OSMemoryManager
     public FrameMapping getFrameMapping(long frame)
     {
         return allocatedFrames.get(frame);
+    }
+
+    public long getMaxFrames()
+    {
+        return maxFrames;
+    }
+
+    /** True when the frame is pinned by the kernel (page-table storage) rather than free or user-allocated. */
+    public boolean isLocked(long frame)
+    {
+        return lockedFrames.contains(frame);
+    }
+
+    /** Unmodifiable snapshot of the eviction order, oldest first (index 0 = next victim). */
+    public List<Long> getReplacementOrder()
+    {
+        return evictionPolicy.getOrder();
     }
 
     public long allocateAndLock(long frames)

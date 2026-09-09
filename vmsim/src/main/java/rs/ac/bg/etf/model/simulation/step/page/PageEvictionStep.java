@@ -28,8 +28,9 @@ public class PageEvictionStep<T extends PageSimulationContext> extends Simulatio
         TLB tlb = context.getTLB();
 
         victimFrame = evictionPolicy.getVictim();
-        
         victimFrameMapping = memoryManager.getFrameMapping(victimFrame);
+        evictionPolicy.removeVictim();
+
         PageTableDescriptor victimDescriptor = victimFrameMapping.descriptor();
         victimDescriptor.setValid(false);
         memoryManager.free(victimFrame);
@@ -66,6 +67,24 @@ public class PageEvictionStep<T extends PageSimulationContext> extends Simulatio
         return String.format("Evicted frame 0x%X (user %d, page %d)%s.",
                 victimFrame, victimFrameMapping.user(), victimFrameMapping.page(),
                 victimDescriptor.isDirty() ? ", writing back to disk" : "");
+    }
+
+    /** The frame chosen as the eviction victim; valid once {@link #execute()} has run. */
+    public long getVictimFrame()
+    {
+        return victimFrame;
+    }
+
+    /** The user that owned the evicted frame; valid once {@link #execute()} has run. */
+    public int getVictimUser()
+    {
+        return victimFrameMapping.user();
+    }
+
+    /** The page that occupied the evicted frame; valid once {@link #execute()} has run. */
+    public long getVictimPage()
+    {
+        return victimFrameMapping.page();
     }
 
 }

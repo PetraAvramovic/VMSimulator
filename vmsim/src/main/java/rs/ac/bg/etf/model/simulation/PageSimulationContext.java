@@ -78,7 +78,7 @@ public class PageSimulationContext extends SimulationContext
             int user = Integer.parseInt(values[0]);
             long page = Long.parseLong(values[1]);
 
-            diskInit.put(diskAddressGenerator.getDiskAddress((user << maxPages) + page), diskInitConfig.get(key));
+            diskInit.put(diskAddressGenerator.getDiskAddress((user << config.getPageBits()) + page), diskInitConfig.get(key));
         }
 
         disk.init(diskInit);

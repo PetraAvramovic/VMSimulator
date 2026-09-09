@@ -1,9 +1,12 @@
 package rs.ac.bg.etf.view;
 
+import javafx.beans.value.ObservableValue;
+import javafx.css.PseudoClass;
 import javafx.scene.Parent;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
@@ -11,7 +14,10 @@ import javafx.scene.control.TabPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.view.tlb.PagedTLBTabView;
 import rs.ac.bg.etf.viewmodel.PagedMMUTabViewModel;
+import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel;
+import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel;
 import rs.ac.bg.etf.viewmodel.SimulationViewModel;
 
 /**
@@ -37,24 +43,52 @@ public class SimulationView {
         this.layoutContainer.setDividerPositions(0.18, 0.82);
     }
 
+    private Button buildBackButton(SimulationViewModel viewModel) {
+        Button backButton = new Button("←");
+        backButton.getStyleClass().add("back-button");
+        backButton.setFocusTraversable(false);
+        backButton.setOnAction(e -> viewModel.navigateBack());
+        return backButton;
+    }
+
     private void clampSidebarWidth(VBox sidebar) {
         sidebar.setMinWidth(SIDEBAR_MIN_WIDTH);
         sidebar.setMaxWidth(SIDEBAR_MAX_WIDTH);
     }
 
     // -------------------------------------------------------------------------
-    // LEFT SIDEBAR: Virtual address list + current VA/PA readouts
+    // LEFT SIDEBAR: Instruction list + current VA/PA readouts
     // -------------------------------------------------------------------------
     private VBox buildLeftSidebar(SimulationViewModel viewModel) {
         VBox leftSidebar = new VBox(12);
         leftSidebar.getStyleClass().add("sidebar-panel");
 
-        Label header = new Label("Virtual Addresses");
+        Button backButton = buildBackButton(viewModel);
+
+        Label header = new Label("Instructions");
         header.getStyleClass().add("column-header");
 
-        Label placeholder = new Label(
-                "The list of virtual addresses being executed will be displayed here once the MMU implementation is connected.");
-        placeholder.getStyleClass().add("sidebar-info-label");
+        ListView<String> instructionListView = new ListView<>(viewModel.getInstructionEntries());
+        instructionListView.getStyleClass().add("instruction-list");
+        instructionListView.setPrefHeight(220);
+        instructionListView.setFocusTraversable(false);
+        instructionListView.setSelectionModel(null);
+
+        ObservableValue<Number> currentInstructionIndex = viewModel.currentInstructionIndexProperty();
+        instructionListView.setCellFactory(list -> new InstructionCell(currentInstructionIndex));
+
+        // Pin the running instruction to the top of the viewport: a bare scrollTo(index) only
+        // guarantees visibility (landing the row at the bottom when advancing forward), so first
+        // park the last row at the bottom, then scroll back up so the target settles at the top.
+        // Near the end of the list there aren't enough rows below it to reach the very top.
+        currentInstructionIndex.addListener((obs, oldIndex, newIndex) -> {
+            int index = newIndex.intValue();
+            int lastRow = viewModel.getInstructionEntries().size() - 1;
+            if (index >= 0 && lastRow >= 0) {
+                instructionListView.scrollTo(lastRow);
+                instructionListView.scrollTo(index);
+            }
+        });
 
         Label currentVaHeader = new Label("Current VA");
         currentVaHeader.getStyleClass().add("column-header");
@@ -67,7 +101,7 @@ public class SimulationView {
         currentPaLabel.textProperty().bind(viewModel.currentPhysicalAddressHexProperty());
 
         leftSidebar.getChildren().addAll(
-                header, placeholder, currentVaHeader, currentVaLabel, currentPaHeader, currentPaLabel);
+                backButton, header, instructionListView, currentVaHeader, currentVaLabel, currentPaHeader, currentPaLabel);
         return leftSidebar;
     }
 
@@ -79,19 +113,23 @@ public class SimulationView {
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
         Tab mmuTab = new Tab("MMU", buildMmuTabContent(viewModel));
-
-        Tab tlbTab = new Tab("TLB", placeholderTabContent(
-                "Translation Lookaside Buffer\n\n" +
-                "Will visualize the TLB lookup/indexing structure and the address-formation logic, " +
-                "specific to the configured TLB type."));
-
-        Tab osTab = new Tab("OS", placeholderTabContent(
-                "Operating System\n\n" +
-                "Will visualize OS-level bookkeeping such as the eviction policy, page/segment table " +
-                "management, and per-user memory allocation."));
+        Tab tlbTab = new Tab("TLB", buildTlbTabContent(viewModel));
+        Tab osTab = new Tab("OS", buildOsTabContent(viewModel));
 
         tabPane.getTabs().addAll(mmuTab, tlbTab, osTab);
         return tabPane;
+    }
+
+    private Node buildOsTabContent(SimulationViewModel viewModel) {
+        if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
+            PagedOSTabViewModel osTabViewModel = new PagedOSTabViewModel(pageContext, viewModel);
+            return new PagedOSTabView(osTabViewModel);
+        }
+
+        return placeholderTabContent(
+                "Operating System\n\n" +
+                "Will visualize OS-level bookkeeping such as the eviction policy, page/segment table " +
+                "management, and per-user memory allocation.");
     }
 
     private Node buildMmuTabContent(SimulationViewModel viewModel) {
@@ -111,6 +149,18 @@ public class SimulationView {
         label.getStyleClass().add("tab-placeholder-label");
         label.setWrapText(true);
         return label;
+    }
+
+    private Node buildTlbTabContent(SimulationViewModel viewModel) {
+        if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
+            PagedTLBTabViewModel tlbTabViewModel = new PagedTLBTabViewModel(pageContext, viewModel);
+            return new PagedTLBTabView(tlbTabViewModel);
+        }
+
+        return placeholderTabContent(
+                "Translation Lookaside Buffer\n\n" +
+                "Will visualize the TLB lookup/indexing structure and the address-formation logic, " +
+                "specific to the configured TLB type.");
     }
 
     // -------------------------------------------------------------------------
@@ -155,5 +205,32 @@ public class SimulationView {
      */
     public Parent getRootContainerNode() {
         return this.layoutContainer;
+    }
+
+    /**
+     * Instruction-list cell that carries a {@code :current} pseudo-class while its row is the
+     * instruction being executed, tracked live off the view model's current-index property.
+     */
+    private static final class InstructionCell extends ListCell<String> {
+        private static final PseudoClass CURRENT = PseudoClass.getPseudoClass("current");
+
+        private final ObservableValue<Number> currentInstructionIndex;
+
+        InstructionCell(ObservableValue<Number> currentInstructionIndex) {
+            this.currentInstructionIndex = currentInstructionIndex;
+            currentInstructionIndex.addListener((obs, oldIndex, newIndex) -> refreshCurrent());
+        }
+
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            setText(empty ? null : item);
+            refreshCurrent();
+        }
+
+        private void refreshCurrent() {
+            boolean current = !isEmpty() && getIndex() == currentInstructionIndex.getValue().intValue();
+            pseudoClassStateChanged(CURRENT, current);
+        }
     }
 }

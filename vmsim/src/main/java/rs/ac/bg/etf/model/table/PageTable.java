@@ -24,6 +24,15 @@ public class PageTable
         //this.startAddress = startAddress;
     }
 
+    /**
+     * Composite disk key for this user's page. Page indices occupy [0, maxPages), so
+     * multiplying the user by maxPages keeps every (user, page) pair distinct.
+     */
+    private long diskAddressFor(long page)
+    {
+        return diskAddressGenerator.getDiskAddress(user * maxPages + page);
+    }
+
     public void init(Map<Long, SimulationConfig.PageTableDescriptorInit> pageTableInit)
     {
         if (pageTableInit == null)
@@ -34,7 +43,7 @@ public class PageTable
             long page = entry.getKey();
             SimulationConfig.PageTableDescriptorInit initData = entry.getValue();
 
-            long disk = diskAddressGenerator.getDiskAddress((user << maxPages) + page);
+            long disk = diskAddressFor(page);
             PageTableDescriptor descriptor = new PageTableDescriptor(
                 initData.valid(),
                 initData.dirty(),
@@ -53,7 +62,7 @@ public class PageTable
 
         if (entry == null)
         {
-            entry = new PageTableDescriptor(false, false, 0, diskAddressGenerator.getDiskAddress((user << maxPages) + page), page);
+            entry = new PageTableDescriptor(false, false, 0, diskAddressFor(page), page);
             entries.put(page, entry);
         }
 
@@ -65,8 +74,8 @@ public class PageTable
         PageTableDescriptor entry = entries.get(page);
 
         if (entry == null)
-            entry = new PageTableDescriptor(false, false, 0, diskAddressGenerator.getDiskAddress((user << maxPages) + page), page);
-    
+            entry = new PageTableDescriptor(false, false, 0, diskAddressFor(page), page);
+
         return entry;
     }
 
@@ -98,8 +107,7 @@ public class PageTable
 
             if (entry == null)
             {
-                entry = new PageTableDescriptor(false, false, 0,
-                    diskAddressGenerator.getDiskAddress((user << maxPages) + page), page);
+                entry = new PageTableDescriptor(false, false, 0, diskAddressFor(page), page);
             }
 
             sb.append(String.format("  [%d]: %s%n", page, entry.toString()));

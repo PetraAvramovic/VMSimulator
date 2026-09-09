@@ -168,6 +168,21 @@
     -fx-background-color: #f8f9fa;
 }
 
+/* Small circular back button floating in the workbench's top-left corner. Overrides the
+   wide default .button geometry to a fixed round icon. */
+.back-button {
+    -fx-min-width: 32px;
+    -fx-pref-width: 32px;
+    -fx-max-width: 32px;
+    -fx-min-height: 32px;
+    -fx-pref-height: 32px;
+    -fx-max-height: 32px;
+    -fx-padding: 0;
+    -fx-font-size: 16px;
+    -fx-background-radius: 16px;
+    -fx-border-radius: 16px;
+}
+
 .sidebar-panel {
     -fx-padding: 15px;
     -fx-pref-width: 240px;
@@ -179,6 +194,22 @@
 .sidebar-info-label {
     -fx-font-size: 12px;
     -fx-text-fill: #7f8c8d;
+}
+
+/* Left-sidebar instruction list: monospaced rows so the access-type / user / address columns line up. */
+.instruction-list .list-cell {
+    -fx-font-family: "monospace";
+    -fx-padding: 4px 8px;
+}
+
+/* The instruction currently being executed -> blue, matching the page table's current-row accent. */
+.instruction-list .list-cell:current {
+    -fx-background-color: #eaf4fc;
+    -fx-border-color: #3498db;
+    -fx-border-width: 1px;
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+    -fx-font-weight: bold;
 }
 
 .tab-placeholder-label {
@@ -226,6 +257,12 @@
 .va-breakdown-cell-right {
     -fx-background-radius: 0 6px 6px 0;
     -fx-border-radius: 0 6px 6px 0;
+}
+
+/* Standalone field (no adjacent neighbour, e.g. the TLB tab's Process box): full rounded border. */
+.va-breakdown-cell-solo {
+    -fx-background-radius: 6px;
+    -fx-border-radius: 6px;
 }
 
 .va-breakdown-title {
@@ -289,6 +326,79 @@ xt-fill: #9aa1a7;
     -fx-stroke-width: 2.0px;  /* Slightly thicker line gives a nice signal pulse */
 }
 
+.tlb-tab-view {
+    -fx-background-color: #f8f9fa;
+}
+
+.tlb-search-line {
+    -fx-stroke: #9d9fa1;
+    -fx-stroke-width: 1.5px;
+    -fx-fill: transparent;
+}
+
+.tlb-search-line:active {
+    -fx-stroke: #3498db;
+    -fx-stroke-width: 2.0px;
+}
+
+/* Bordered panel behind the TLB rows, matching the MMU tab's page table, so the search-bus
+   stub lines terminate on a visible surface. */
+.tlb-table {
+    -fx-padding: 10px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+}
+
+/* TLB row the running instruction hit: found already cached -> green. */
+.tlb-row-hit {
+    -fx-background-color: #e8f6ec;
+    -fx-border-color: #27ae60;
+    -fx-border-width: 1px;
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+}
+
+/* TLB row just written by an insertion -> blue, matching the page table's current-row accent. */
+.tlb-row-insert {
+    -fx-background-color: #eaf4fc;
+    -fx-border-color: #3498db;
+    -fx-border-width: 1px;
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+}
+
+/* Direct-mapped: the row the lookup probed and missed -> red (turns .tlb-row-insert blue once the
+   refill step runs). */
+.tlb-row-miss {
+    -fx-background-color: #fdecea;
+    -fx-border-color: #e74c3c;
+    -fx-border-width: 1px;
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+}
+
+/* Direct-mapped tag readout / bit-width tag on the split's left branch: green on a hit, red on a
+   miss (and through the refill); neutral .mmu-bit-value default before the lookup resolves. */
+.tlb-tag-hit { -fx-text-fill: #27ae60; }
+.tlb-tag-miss { -fx-text-fill: #e74c3c; }
+
+/* Heading above each schematic block (VA / PA / Process / page table / TLB) on the MMU and TLB tabs. */
+.mmu-section-label {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+}
+
+/* The "TLB" caption is just a quiet label for the panel below it, not a headline. */
+.tlb-table-title {
+    -fx-font-size: 11px;
+    -fx-font-weight: normal;
+    -fx-text-fill: #9aa1a7;
+}
+
 .mmu-bit-width {
     -fx-font-family: "Consolas", "Monospaced", monospace; /* Strictly forces a monospace layout */
     -fx-font-size: 11px;
@@ -318,4 +428,159 @@ xt-fill: #9aa1a7;
     -fx-font-weight: bold;
     -fx-font-size: 14px;
     -fx-text-fill: #3498db;
+}
+
+/* =========================================================================
+   PAGED OS TAB (frame table + occupancy strip + disk box + FIFO queue)
+   ========================================================================= */
+.os-tab-container {
+    -fx-background-color: #f8f9fa;
+}
+
+/* Frame table body: same panel treatment as the MMU tab's page table. */
+.frame-table-view {
+    -fx-padding: 8px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
+}
+
+.frame-table-header {
+    -fx-border-color: transparent transparent #dcdde1 transparent;
+    -fx-border-width: 1px;
+}
+
+.frame-table-header .page-table-cell {
+    -fx-font-weight: bold;
+    -fx-text-fill: #7f8c8d;
+    -fx-font-size: 12px;
+}
+
+/* Virtualised, scrollable frame list -- strip the ListView chrome so rows sit on the panel. */
+.frame-table-list {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.frame-table-list .list-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-border-color: transparent transparent #f1f2f6 transparent;
+    -fx-border-width: 1px;
+}
+
+.frame-table-list .list-cell:filled:hover,
+.frame-table-list .list-cell:filled:selected {
+    -fx-background-color: transparent;
+}
+
+/* Frame the current OS sub-flow is loading into -> blue, matching the page table's current row. */
+.frame-table-list .list-cell.frame-table-row-active {
+    -fx-background-color: #eaf4fc;
+    -fx-border-color: #3498db;
+}
+
+/* The frame that would be evicted next once memory is full -> amber. */
+.frame-table-list .list-cell.os-row-victim {
+    -fx-background-color: #fdf3e0;
+    -fx-border-color: #e0a63b;
+}
+
+/* The frame being evicted right now -> red. */
+.frame-table-list .list-cell.os-row-evicting {
+    -fx-background-color: #fdecea;
+    -fx-border-color: #e74c3c;
+}
+
+/* Leading swatch on each row -- doubles as the occupancy strip; carries the next-victim marker. */
+.os-frame-swatch {
+    -fx-border-color: #ffffff;
+    -fx-border-width: 0 1px 0 0;
+    -fx-text-fill: #b9791a;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.os-frame-free      { -fx-background-color: #eef0f2; }
+.os-frame-allocated { -fx-background-color: #d6e9fb; }
+.os-frame-kernel    { -fx-background-color: #c9ccd1; }
+.os-frame-victim    { -fx-background-color: #f5d9a8; }
+.os-frame-evicting  { -fx-background-color: #f5b7b1; }
+
+/* Disk box: same white/blue framed card as the MMU tab's standalone value boxes. */
+.os-disk-box {
+    -fx-padding: 10px 14px 10px 14px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #3498db;
+    -fx-border-width: 2px;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+}
+
+.os-disk-summary {
+    -fx-font-family: "Consolas", "Monospaced", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: #7f8c8d;
+}
+
+/* Captions riding the disk <-> frame wires ("load page" / "write back"). */
+.os-wire-label {
+    -fx-font-family: "Consolas", "Monospaced", monospace;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #7f8c8d;
+}
+
+.os-wire-label:active {
+    -fx-text-fill: #3498db;
+}
+
+.os-fifo-strip {
+    -fx-spacing: 6px;
+    -fx-padding: 6px 0 6px 0;
+}
+
+/* One frame's slot in the replacement queue. */
+.os-fifo-chip {
+    -fx-padding: 2px 8px 2px 8px;
+    -fx-background-color: #eef0f2;
+    -fx-background-radius: 10px;
+    -fx-border-color: #cfd3d8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 10px;
+    -fx-font-family: "Consolas", "Monospaced", monospace;
+    -fx-font-size: 12px;
+    -fx-text-fill: #2c3e50;
+}
+
+/* Head of the queue while it is the imminent victim (memory full). */
+.os-fifo-chip-head {
+    -fx-background-color: #f5d9a8;
+    -fx-border-color: #e0a63b;
+    -fx-font-weight: bold;
+}
+
+/* Newest resident. */
+.os-fifo-chip-tail {
+    -fx-background-color: #d6e9fb;
+    -fx-border-color: #3498db;
+}
+
+.os-user-summary {
+    -fx-spacing: 6px;
+    -fx-padding: 4px 0 4px 0;
+}
+
+.os-user-summary-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+.os-user-summary-row {
+    -fx-font-family: "Consolas", "Monospaced", monospace;
+    -fx-font-size: 12px;
+    -fx-text-fill: #2c3e50;
 }

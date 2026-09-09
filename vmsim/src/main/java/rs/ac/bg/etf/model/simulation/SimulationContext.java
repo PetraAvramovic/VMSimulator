@@ -1,6 +1,8 @@
 package rs.ac.bg.etf.model.simulation;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import rs.ac.bg.etf.model.disk.Disk;
 import rs.ac.bg.etf.model.disk.DiskAddressGenerator;
@@ -81,6 +83,11 @@ public abstract class SimulationContext
         return tlb;
     }
 
+    public SimulationConfig.TLBType getTlbType()
+    {
+        return config.getTlbType();
+    }
+
     public int getWordBits()
     {
         return config.getWordBits();
@@ -101,6 +108,11 @@ public abstract class SimulationContext
         return config.getPhysicalAddressBits();
     }
 
+    public int getNumberOfUsers()
+    {
+        return numberOfUsers;
+    }
+
     public int getDiskBits()
     {
         return config.getDiskBits();
@@ -119,20 +131,35 @@ public abstract class SimulationContext
         return instructions.get(currentInstructionInd);
     }
 
+    public List<Instruction> getInstructions()
+    {
+        return Collections.unmodifiableList(instructions);
+    }
+
+    public int getCurrentInstructionIndex()
+    {
+        return currentInstructionInd;
+    }
+
     public boolean hasCurrentInstruction()
     {
         return currentInstructionInd >= 0 && currentInstructionInd < instructions.size();
     }
 
+    public boolean hasNextInstruction()
+    {
+        return currentInstructionInd + 1 < instructions.size();
+    }
+
     public void nextInstruction()
     {
-        if (currentInstructionInd < instructions.size())
+        if (currentInstructionInd < instructions.size() - 1)
             currentInstructionInd++;
     }
 
     public void previousInstruction()
     {
-        if (currentInstructionInd > 0)
+        if (currentInstructionInd >= 0)
             currentInstructionInd--;
     }
 

@@ -7,8 +7,9 @@ import rs.ac.bg.etf.model.simulation.SimulationConfig;
 import rs.ac.bg.etf.model.simulation.SimulationFactory;
 import rs.ac.bg.etf.viewmodel.listeners.ConfigurationNavigationListener;
 import rs.ac.bg.etf.viewmodel.listeners.MainMenuNavigationListener;
+import rs.ac.bg.etf.viewmodel.listeners.SimulationNavigationListener;
 
-public class AppViewModel implements MainMenuNavigationListener, ConfigurationNavigationListener
+public class AppViewModel implements MainMenuNavigationListener, ConfigurationNavigationListener, SimulationNavigationListener
 {
     private final MainMenuViewModel mainMenuViewModel;
     private final ConfigurationViewModel configurationViewModel;
@@ -61,7 +62,8 @@ public class AppViewModel implements MainMenuNavigationListener, ConfigurationNa
             Simulation simulation = SimulationFactory.createSimulation(finalizedConfig);
             simulation.init();
 
-            this.simulationViewModel = new SimulationViewModel(simulation);
+            this.simulationViewModel = new SimulationViewModel(simulation, this);
+            this.mainMenuViewModel.resumeAvailableProperty().set(true);
             this.currentScreen.set(ApplicationScreenState.SIMULATION);
         } catch (Exception e) {
             System.out.println("AppViewModel: Failed to initialize simulation - " + e.getMessage());
@@ -69,8 +71,22 @@ public class AppViewModel implements MainMenuNavigationListener, ConfigurationNa
     }
 
     @Override
-    public void onConfigToMainMenu() 
+    public void onConfigToMainMenu()
     {
         this.currentScreen.set(ApplicationScreenState.MAIN_MENU);
+    }
+
+    @Override
+    public void onSimulationToMainMenu()
+    {
+        this.currentScreen.set(ApplicationScreenState.MAIN_MENU);
+    }
+
+    @Override
+    public void onMainMenuToResume()
+    {
+        if (simulationViewModel != null) {
+            this.currentScreen.set(ApplicationScreenState.SIMULATION);
+        }
     }
 }

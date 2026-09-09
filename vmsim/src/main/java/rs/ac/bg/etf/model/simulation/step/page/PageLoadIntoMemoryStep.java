@@ -72,5 +72,11 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
         return String.format("Loaded page %d from disk into frame 0x%X.", descriptor.getPage(), frame);
     }
 
+    /** The frame the faulting page is loaded into. */
+    public long getFrame()
+    {
+        return frame;
+    }
+
     
 }

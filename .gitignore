@@ -2,8 +2,9 @@ target/
 .vscode/
 config/
 
-# Project plan (working document, not version controlled)
 PLAN.md
+CLAUDE.md
+BUGS.md
 
 pom.xml.tag
 pom.xml.releaseBackup

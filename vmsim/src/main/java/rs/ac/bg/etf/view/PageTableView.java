@@ -9,8 +9,8 @@ import javafx.scene.effect.BoxBlur;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
+import rs.ac.bg.etf.view.util.ValueConverter;
+import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.PagedMMUTabViewModel;
 import rs.ac.bg.etf.viewmodel.PagedMMUTabViewModel.Row;
 
@@ -22,10 +22,6 @@ import java.util.List;
  * Renders a windowed page table grid; exposes the highlighted row's node so a connector line can target it.
  */
 public class PageTableView extends VBox {
-    private static final double CELL_PADDING = 16;
-    private static final Font CELL_FONT = Font.font("Consolas", 13);
-    private static final Font HEADER_FONT = Font.font("Consolas", javafx.scene.text.FontWeight.BOLD, 12);
-
     private final PagedMMUTabViewModel viewModel;
     private final VBox rowsContainer = new VBox(2);
     private final ObjectProperty<Region> currentEntryAnchor = new SimpleObjectProperty<>();
@@ -81,8 +77,8 @@ public class PageTableView extends VBox {
         header.getStyleClass().add("page-table-header");
         Label validHeaderCell = cell("V", 30);
         Label dirtyHeaderCell = cell("D", 30);
-        Label blockHeaderCell = cell("Block", columnWidth("Block", viewModel.blockHexDigitsProperty().get()));
-        Label diskHeaderCell = cell("Disk", columnWidth("Disk", viewModel.diskHexDigitsProperty().get()));
+        Label blockHeaderCell = cell("Block", WidthCalculator.columnWidth("Block", viewModel.blockHexDigitsProperty().get()));
+        Label diskHeaderCell = cell("Disk", WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get()));
         header.getChildren().addAll(
                 cell("Index", 60),
                 validHeaderCell,
@@ -123,8 +119,8 @@ public class PageTableView extends VBox {
      * Updates labels and toggles styles cleanly without re-inserting nodes.
      */
     private void updateRowData() {
-        double blockWidth = columnWidth("Block", viewModel.blockHexDigitsProperty().get());
-        double diskWidth = columnWidth("Disk", viewModel.diskHexDigitsProperty().get());
+        double blockWidth = WidthCalculator.columnWidth("Block", viewModel.blockHexDigitsProperty().get());
+        double diskWidth = WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get());
 
         List<Row> rowsDataList = viewModel.getVisibleRows();
         boolean isTableAccessed = viewModel.pageTableAccessedProperty().get();
@@ -146,10 +142,10 @@ public class PageTableView extends VBox {
                 rowComponent.validLabel().setText(rowData.valid() ? "1" : "0");
                 rowComponent.dirtyLabel().setText(rowData.dirty() ? "1" : "0");
                 
-                rowComponent.blockLabel().setText(toHex(rowData.block(), viewModel.blockHexDigitsProperty().get()));
+                rowComponent.blockLabel().setText(ValueConverter.toHex(rowData.block(), viewModel.blockHexDigitsProperty().get()));
                 rowComponent.blockLabel().setPrefWidth(blockWidth);
                 
-                rowComponent.diskLabel().setText(toHex(rowData.disk(), viewModel.diskHexDigitsProperty().get()));
+                rowComponent.diskLabel().setText(ValueConverter.toHex(rowData.disk(), viewModel.diskHexDigitsProperty().get()));
                 rowComponent.diskLabel().setPrefWidth(diskWidth);
 
                 if (rowData.current() && isTableAccessed) {
@@ -190,18 +186,7 @@ public class PageTableView extends VBox {
         rowsContainer.setOpacity(accessed ? 1.0 : 0.45);
     }
 
-    private static String toHex(long value, int digits) {
-        return String.format("0x%0" + digits + "X", value);
-    }
-
-    private static double columnWidth(String header, int digits) {
-        Text valueSample = new Text("F".repeat(Math.max(digits + 2, 1)));
-        valueSample.setFont(CELL_FONT);
-        Text headerSample = new Text(header);
-        headerSample.setFont(HEADER_FONT);
-        double widest = Math.max(valueSample.getLayoutBounds().getWidth(), headerSample.getLayoutBounds().getWidth());
-        return widest + CELL_PADDING;
-    }
+    
 
     /**
      * Small structural helper record to store your 7 permanent label handles.

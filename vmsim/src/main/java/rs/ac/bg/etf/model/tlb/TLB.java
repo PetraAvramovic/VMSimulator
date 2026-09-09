@@ -194,7 +194,39 @@ public abstract class TLB
     {
         return (processId << addressBits) | addressComponent;
     }
-    
+
+    /**
+     * Number of low-order bits of the full lookup key that select the row/set rather than being
+     * stored in the tag. Zero for a fully-associative TLB, where the whole key is the tag.
+     * @return the index/set bit count
+     */
+    public int getIndexComponentBits()
+    {
+        return 0;
+    }
+
+    /**
+     * Reduces a full lookup key (as returned by {@link #calculateTag}) to the value actually stored
+     * in and compared against {@link TLBEntry#getTag()}. Identity for a fully-associative TLB.
+     * @param fullKey The full lookup key
+     * @return The stored-tag value
+     */
+    protected long toStoredTag(long fullKey)
+    {
+        return fullKey >>> getIndexComponentBits();
+    }
+
+    /**
+     * The single row a full lookup key deterministically maps to (direct-mapped TLB), or -1 when the
+     * key does not resolve to exactly one row (fully- or set-associative).
+     * @param fullKey The full lookup key
+     * @return The mapped row index, or -1
+     */
+    public int mappedSlot(long fullKey)
+    {
+        return -1;
+    }
+
     public List<TLBEntry> getEntries()
     {
         return Collections.unmodifiableList(entries);

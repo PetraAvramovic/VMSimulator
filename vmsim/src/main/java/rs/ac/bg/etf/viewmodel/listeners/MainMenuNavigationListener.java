@@ -4,4 +4,5 @@ public interface MainMenuNavigationListener
 {
     public void onMainMenuToStart();
     public void onMainMenuToSettings();
+    public void onMainMenuToResume();
 }

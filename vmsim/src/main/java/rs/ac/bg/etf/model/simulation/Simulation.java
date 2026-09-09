@@ -45,9 +45,11 @@ public class Simulation
 
     public void previousStep()
     {
+        // Pop and decrement together so currentStepNum stays equal to stepHistory.size() even if
+        // undo() or getDescription() below throws -- otherwise the counter and the stack drift apart.
         currentStep = stepHistory.pop();
-        currentStep.undo();
         currentStepNum--;
+        currentStep.undo();
         lastStepDescription = "Undid: " + currentStep.getDescription();
     }
 

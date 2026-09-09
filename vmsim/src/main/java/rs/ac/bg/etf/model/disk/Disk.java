@@ -1,16 +1,23 @@
 package rs.ac.bg.etf.model.disk;
 
 import java.util.HashMap;
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
-public class Disk 
+public class Disk
 {
-    private HashMap<Long, SortedMap<Long, Long>> blocks = new HashMap<>(); 
+    private HashMap<Long, SortedMap<Long, Long>> blocks = new HashMap<>();
 
     public void init(HashMap<Long, SortedMap<Long, Long>> diskInit)
     {
-        
+        if (diskInit == null)
+            return;
+
+        for (Map.Entry<Long, SortedMap<Long, Long>> entry : diskInit.entrySet())
+        {
+            blocks.put(entry.getKey(), new TreeMap<>(entry.getValue()));
+        }
     }
 
     public SortedMap<Long, Long> readBlock(long address)

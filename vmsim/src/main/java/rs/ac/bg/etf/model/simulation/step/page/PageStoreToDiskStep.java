@@ -12,6 +12,7 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
 {
     private PageTableDescriptor descriptor;
     private SortedMap<Long, Long> previousDiskBlock;
+    private long frame;
 
     public PageStoreToDiskStep(T context, PageTableDescriptor descriptor) {
         super(context);
@@ -27,7 +28,7 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
         long diskAddress = descriptor.getDisk();
         previousDiskBlock = disk.readBlock(diskAddress);
 
-        long frame = descriptor.getBlock();
+        frame = descriptor.getBlock();
         SortedMap<Long, Long> block = memory.readBlock(frame, context.getPageSize());
         disk.writeBlock(diskAddress, block);
         descriptor.setDirty(false);
@@ -48,6 +49,24 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
     public String getDescription()
     {
         return String.format("Wrote dirty page %d back to disk address 0x%X.", descriptor.getPage(), descriptor.getDisk());
+    }
+
+    /** The frame being written back (and then reused for the incoming page); valid once {@link #execute()} has run. */
+    public long getFrame()
+    {
+        return frame;
+    }
+
+    /** Disk address the dirty victim page is written to. */
+    public long getDiskAddress()
+    {
+        return descriptor.getDisk();
+    }
+
+    /** The victim page being written back. */
+    public long getVictimPage()
+    {
+        return descriptor.getPage();
     }
 
     

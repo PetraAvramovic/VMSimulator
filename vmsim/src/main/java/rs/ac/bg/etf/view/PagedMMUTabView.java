@@ -18,6 +18,10 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polyline;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import rs.ac.bg.etf.view.shape.BitWidthLine;
+import rs.ac.bg.etf.view.shape.CurlyBrace;
+import rs.ac.bg.etf.view.util.FieldBoxes;
+import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.viewmodel.PagedMMUTabViewModel;
 import rs.ac.bg.etf.viewmodel.PagedMMUTabViewModel.MmuLine;
 
@@ -28,19 +32,21 @@ import java.util.List;
  * and the windowed page table) connected by lines, mirroring the paged-MMU hardware diagram.
  */
 public class PagedMMUTabView extends StackPane {
-    // Must match .va-breakdown-value's actual CSS weight/size, otherwise width estimates undershoot
-    // the real rendered text and values get clipped to an ellipsis.
-    private static final Font FIELD_FONT = Font.font("Consolas", javafx.scene.text.FontWeight.BOLD, 15);
+    // Field-box font/padding/height live in FieldBoxes now (shared with the TLB tab); aliased here so
+    // the many BOX_HEIGHT/FIELD_FONT call sites below stay unchanged.
+    private static final Font FIELD_FONT = FieldBoxes.FIELD_FONT;
     private static final Font TITLE_FONT = Font.font("System", javafx.scene.text.FontWeight.BOLD, 11);
-    private static final double FIELD_PADDING = 36;
+    private static final double FIELD_PADDING = FieldBoxes.FIELD_PADDING;
     private static final double TITLE_PADDING = 40;
-    private static final double MIN_FIELD_WIDTH = 70;
-    // Boxes are forced to this exact height (padding 10px*2 + border 2px*2 + title/value text) so the
-    // fixed-coordinate connector lines below always line up with the real rendered box edges.
-    private static final double BOX_HEIGHT = 62;
+    private static final double MIN_FIELD_WIDTH = FieldBoxes.MIN_FIELD_WIDTH;
+    private static final double BOX_HEIGHT = FieldBoxes.BOX_HEIGHT;
     private static final double CANVAS_WIDTH = 920;
     private static final double CANVAS_HEIGHT = 780;
     private static final double MARGIN = 30;
+    // Every field that drops straight down from the page table's bottom edge uses this wire length, so
+    // that their bit-width indicators (each drawn at its wire's midpoint) sit on one horizontal row.
+    private static final double DROP_LENGTH = 40;
+    private static final double DROP_INDICATOR_Y = DROP_LENGTH / 2;
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
 
     private final Pane canvas = new Pane();
@@ -53,44 +59,44 @@ public class PagedMMUTabView extends StackPane {
         canvas.setPrefSize(CANVAS_WIDTH, CANVAS_HEIGHT);
 
         // ---- Standalone field widths (unchanged: title stays inside these boxes) ----
-        double pointerBoxW = titledFieldWidth("Page Table Pointer", hexDigits(viewModel.getPhysicalAddressBits()));
-        double offsetBoxW = titledFieldWidth("Table Offset", hexDigits(viewModel.getOffsetBits()));
+        double pointerBoxW = titledFieldWidth("Page Table Pointer", ValueConverter.hexDigitsFor(viewModel.getPhysicalAddressBits()));
+        double offsetBoxW = titledFieldWidth("Table Offset", ValueConverter.hexDigitsFor(viewModel.getOffsetBits()));
 
         double boxY = 50;
 
         // ---- Virtual Address: Page | Word, rendered as one divided box (no gap, shared border) ----
-        Region pageBox = valueCell("va-breakdown-cell-left", viewModel.pageHexProperty(), exactHexDigits(viewModel.getPageBits()));
+        Region pageBox = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.pageHexProperty(), ValueConverter.hexDigitsFor(viewModel.getPageBits()));
         double pageBoxW = pageBox.getPrefWidth();
         double pageBoxX = MARGIN;
         pageBox.setLayoutX(pageBoxX);
         pageBox.setLayoutY(boxY);
 
-        Region wordBoxVA = valueCell("va-breakdown-cell-right", viewModel.wordHexProperty(), exactHexDigits(viewModel.getWordBits()));
+        Region wordBoxVA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.wordHexProperty(), ValueConverter.hexDigitsFor(viewModel.getWordBits()));
         double wordBoxW = wordBoxVA.getPrefWidth();
         double wordBoxVAX = pageBoxX + pageBoxW;
         wordBoxVA.setLayoutX(wordBoxVAX);
         wordBoxVA.setLayoutY(boxY);
 
-        Label pageTitle = fieldTitle("Page", pageBoxX, boxY - 20);
-        Label wordTitleVA = fieldTitle("Word", wordBoxVAX, boxY - 20);
+        Label pageTitle = FieldBoxes.fieldTitle("Page", pageBoxX, boxY - 20);
+        Label wordTitleVA = FieldBoxes.fieldTitle("Word", wordBoxVAX, boxY - 20);
 
         // ---- Physical Address: Block | Word, mirrored on the right with the same adjacent-box treatment ----
         double wordBoxPAX = CANVAS_WIDTH - MARGIN - wordBoxW;
-        Region wordBoxPA = valueCell("va-breakdown-cell-right", viewModel.paWordHexProperty(), exactHexDigits(viewModel.getWordBits()));
+        Region wordBoxPA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.paWordHexProperty(), ValueConverter.hexDigitsFor(viewModel.getWordBits()));
         wordBoxPA.setLayoutX(wordBoxPAX);
         wordBoxPA.setLayoutY(boxY);
 
-        Region blockBoxPA = valueCell("va-breakdown-cell-left", viewModel.blockHexProperty(), viewModel.blockHexDigitsProperty().get());
+        Region blockBoxPA = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.blockHexProperty(), viewModel.blockHexDigitsProperty().get());
         double blockBoxW = blockBoxPA.getPrefWidth();
         double blockBoxPAX = wordBoxPAX - blockBoxW;
         blockBoxPA.setLayoutX(blockBoxPAX);
         blockBoxPA.setLayoutY(boxY);
 
-        Label blockTitle = fieldTitle("Block", blockBoxPAX, boxY - 20);
-        Label wordTitlePA = fieldTitle("Word", wordBoxPAX, boxY - 20);
+        Label blockTitle = FieldBoxes.fieldTitle("Block", blockBoxPAX, boxY - 20);
+        Label wordTitlePA = FieldBoxes.fieldTitle("Word", wordBoxPAX, boxY - 20);
 
-        Label vaHeader = sectionLabel("Virtual Address", pageBoxX, 10);
-        Label paHeader = sectionLabel("Physical Address", blockBoxPAX, 10);
+        Label vaHeader = FieldBoxes.sectionLabel("Virtual Address", pageBoxX, 10);
+        Label paHeader = FieldBoxes.sectionLabel("Physical Address", blockBoxPAX, 10);
 
         // ---- Word pass-through: VA Word flows straight across into PA Word, unchanged ----
         // Right-angle elbow (each segment changes only one axis) so it reads as a clean signal wire
@@ -102,29 +108,84 @@ public class PagedMMUTabView extends StackPane {
                 wordVACenterX, passY,
                 wordPACenterX, passY,
                 wordPACenterX, boxY + BOX_HEIGHT);
-        Label wordBitsStart = bitLabel(viewModel.getWordBits(), wordVACenterX + 6, passY - 18);
-        Label wordBitsEnd = bitLabel(viewModel.getWordBits(), wordPACenterX + 6, passY - 18);
+        Label wordBitsStart = FieldBoxes.bitLabel(viewModel.getWordBits(), wordVACenterX + 6, passY - 18);
+        Label wordBitsEnd = FieldBoxes.bitLabel(viewModel.getWordBits(), wordPACenterX + 6, passY - 18);
 
         // ---- Page -> page-table offset (page bits concatenated with a fixed shift-bit zero fill) ----
+        // There is no standalone box for this value anymore; it is shown as a label riding the wire
+        // that carries it from the merge brace down into the adder.
         double offsetBoxY = 220;
         double offsetBoxX = pageBoxX;
-        Region offsetBox = valueBox("Table Offset", viewModel.descriptorOffsetHexProperty(), offsetBoxW, offsetBoxX, offsetBoxY);
+        double offsetLineMidY = offsetBoxY + BOX_HEIGHT;
 
-        Line pageDownLine = line(pageBoxX + pageBoxW / 2, boxY + BOX_HEIGHT, offsetBoxX + offsetBoxW * 0.3, offsetBoxY);
-        Label pageBitsLabel = bitLabel(viewModel.getPageBits(), pageBoxX + pageBoxW / 2 + 6, (boxY + BOX_HEIGHT + offsetBoxY) / 2);
+        // The page line and the zero-fill line merge into a single offset value via a curly brace;
+        // its ears sit a fixed gap above the merge point so there's room for the brace curve + stub.
+        // The feeding lines and the merge stub stop short of the brace, leaving a visible gap.
+        double braceTopY = offsetBoxY - 10;
+        double braceDepth = 20;
+        double braceGap = 8;
+        // The tip's true X depends on both ears (page-box center and the zero-fill line's X), so the
+        // stub below the brace must target that same point exactly, or it reads as a slight bend.
+        double mergeCenterX = ((pageBoxX + pageBoxW / 2.0) + (offsetBoxX + offsetBoxW * 0.7)) / 2.0;
 
-        Line shiftDownLine = line(offsetBoxX + offsetBoxW * 0.7, boxY + BOX_HEIGHT + 50, offsetBoxX + offsetBoxW * 0.7, offsetBoxY);
+        CurlyBrace offsetBrace = new CurlyBrace();
+        offsetBrace.depthProperty().set(braceDepth);
+
+        // Page field -> table offset: a plain wire (no arrow) that carries its own mid-span bit-width tag.
+        BitWidthLine pageDownLine = bitWidthWire(viewModel.getPageBits());
+        pageDownLine.arrowTipVisibleProperty().set(false);
+
+        pageDownLine.startXProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> {
+            return pageBox.getLayoutX() + (pageBox.getWidth() / 2.0);
+        }, pageBox.layoutXProperty(), pageBox.widthProperty())); // Re-calculates if box moves or stretches
+
+            // Bind Start Y to the exact bottom edge of the pageBox
+        pageDownLine.startYProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> {
+            return pageBox.getLayoutY() + pageBox.getHeight();
+        }, pageBox.layoutYProperty(), pageBox.heightProperty()));
+
+        // The brace's left ear tracks the page line's own start X, so the line stays perfectly vertical
+        offsetBrace.leftXProperty().bind(pageDownLine.startXProperty());
+        offsetBrace.leftYProperty().set(braceTopY);
+        pageDownLine.endXProperty().bind(offsetBrace.leftXProperty());
+        pageDownLine.endYProperty().bind(offsetBrace.leftYProperty().subtract(braceGap));
+
+        double shiftLineX = offsetBoxX + offsetBoxW * 0.7;
+        BitWidthLine shiftDownLine = bitWidthWire(viewModel.getShiftBits());
+        shiftDownLine.arrowTipVisibleProperty().set(false);
+        shiftDownLine.startXProperty().set(shiftLineX);
+        shiftDownLine.startYProperty().set(boxY + BOX_HEIGHT + 50);
+
         Label zeroFillLabel = new Label("0");
         zeroFillLabel.getStyleClass().add("mmu-bit-value");
-        zeroFillLabel.setLayoutX(shiftDownLine.getStartX());
+        zeroFillLabel.setLayoutX(shiftLineX);
         zeroFillLabel.setLayoutY(boxY + BOX_HEIGHT + 30);
 
         zeroFillLabel.widthProperty().addListener((obs, oldWidth, newWidth) -> {
             double labelWidth = newWidth.doubleValue();
-            zeroFillLabel.setLayoutX(offsetBoxX + offsetBoxW * 0.7 - (labelWidth / 2.0));
+            zeroFillLabel.setLayoutX(shiftLineX - (labelWidth / 2.0));
         });
 
-        Label shiftBitsLabel = bitLabel(viewModel.getShiftBits(), offsetBoxX + offsetBoxW * 0.7 + 6, (boxY + BOX_HEIGHT + offsetBoxY) / 2 + 24);
+        // The brace's right ear tracks the zero-fill line's own X, so that line stays vertical too
+        offsetBrace.rightXProperty().set(shiftLineX);
+        offsetBrace.rightYProperty().set(braceTopY);
+        shiftDownLine.endXProperty().bind(offsetBrace.rightXProperty());
+        shiftDownLine.endYProperty().bind(offsetBrace.rightYProperty().subtract(braceGap));
+
+        // Merged offset value stub: descends from the brace's tip toward the adder, leaving a gap
+        // between the brace's point and the stub so they don't visually touch.
+        BitWidthLine offsetMergeLine = bitWidthWire(viewModel.getOffsetBits());
+        offsetMergeLine.arrowTipVisibleProperty().set(false);
+        offsetMergeLine.endXProperty().set(mergeCenterX);
+        offsetMergeLine.endYProperty().set(offsetLineMidY);
+        offsetMergeLine.startXProperty().bind(offsetBrace.tipXProperty());
+        offsetMergeLine.startYProperty().bind(offsetBrace.tipYProperty().add(braceGap));
+
+        Label offsetValueLabel = new Label();
+        offsetValueLabel.textProperty().bind(viewModel.descriptorOffsetHexProperty());
+        offsetValueLabel.getStyleClass().add("mmu-bit-value");
+        offsetValueLabel.setLayoutX(mergeCenterX + 10);
+        offsetValueLabel.setLayoutY(offsetLineMidY - 8);
 
         // ---- Page table pointer (base address of the current user's page table) ----
         double pointerBoxX = offsetBoxX + offsetBoxW + 90;
@@ -132,16 +193,23 @@ public class PagedMMUTabView extends StackPane {
         Region pointerBox = valueBox("Page Table Pointer", viewModel.pageTablePointerHexProperty(), pointerBoxW, pointerBoxX, pointerBoxY);
 
         // ---- Adder: page table pointer + table offset = descriptor's physical address ----
-        double adderCenterX = offsetBoxX + offsetBoxW / 2;
+        double adderCenterX = mergeCenterX;
         double adderCenterY = offsetBoxY + BOX_HEIGHT + 70;
-        Circle adderCircle = new Circle(adderCenterX, adderCenterY, 18);
+        double adderRadius = 18;
+
+        // A StackPane centers its children by bounds, so the "+" sits exactly in the middle of the
+        // circle regardless of font metrics (unlike hardcoded pixel offsets).
+        StackPane adderNode = new StackPane();
+        adderNode.setLayoutX(adderCenterX - adderRadius);
+        adderNode.setLayoutY(adderCenterY - adderRadius);
+        adderNode.setPrefSize(adderRadius * 2, adderRadius * 2);
+        Circle adderCircle = new Circle(adderRadius);
         adderCircle.getStyleClass().add("mmu-adder-circle");
         Label adderPlus = new Label("+");
         adderPlus.getStyleClass().add("mmu-adder-label");
-        adderPlus.setLayoutX(adderCenterX - 5);
-        adderPlus.setLayoutY(adderCenterY - 13);
+        adderNode.getChildren().addAll(adderCircle, adderPlus);
 
-        Line offsetToAdder = line(offsetBoxX + offsetBoxW / 2, offsetBoxY + BOX_HEIGHT, adderCenterX, adderCenterY - 18);
+        Line offsetToAdder = line(mergeCenterX, offsetLineMidY, adderCenterX, adderCenterY - adderRadius);
         Polyline pointerToAdder = elbow(
                 pointerBoxX + pointerBoxW / 2, pointerBoxY + BOX_HEIGHT,
                 pointerBoxX + pointerBoxW / 2, adderCenterY,
@@ -151,10 +219,14 @@ public class PagedMMUTabView extends StackPane {
         double tableX = pointerBoxX - 40;
         double tableY = adderCenterY + 90;
 
-        Line adderDownStub = line(adderCenterX, adderCenterY + 18, adderCenterX, tableY - 20);
-        Label physBitsLabel = bitLabel(viewModel.getPhysicalAddressBits(), adderCenterX + 6, adderCenterY + 45);
+        BitWidthLine adderDownStub = bitWidthWire(viewModel.getPhysicalAddressBits());
+        adderDownStub.arrowTipVisibleProperty().set(false);
+        adderDownStub.startXProperty().set(adderCenterX);
+        adderDownStub.startYProperty().set(adderCenterY + 18);
+        adderDownStub.endXProperty().set(adderCenterX);
+        adderDownStub.endYProperty().set(tableY - 20);
 
-        Label tableHeaderLabel = sectionLabel("Page Table", tableX, tableY - 24);
+        Label tableHeaderLabel = FieldBoxes.sectionLabel("Page Table", tableX, tableY - 24);
         Label tableSizeLabel = new Label("2^" + viewModel.getPageBits() + " entries");
         tableSizeLabel.getStyleClass().add("mmu-bit-value");
         tableSizeLabel.setLayoutX(tableX + 260);
@@ -165,11 +237,12 @@ public class PagedMMUTabView extends StackPane {
         pageTableView.setLayoutY(tableY);
 
         canvas.getChildren().addAll(
-                wordPassLine, pageDownLine, shiftDownLine, offsetToAdder, pointerToAdder, adderDownStub,
-                wordBitsStart, wordBitsEnd, pageBitsLabel, zeroFillLabel, shiftBitsLabel, physBitsLabel,
+                wordPassLine, pageDownLine, shiftDownLine, offsetBrace, offsetMergeLine,
+                offsetValueLabel, offsetToAdder, pointerToAdder, adderDownStub,
+                wordBitsStart, wordBitsEnd, zeroFillLabel,
                 vaHeader, paHeader, pageTitle, wordTitleVA, blockTitle, wordTitlePA,
-                pageBox, wordBoxVA, blockBoxPA, wordBoxPA, offsetBox, pointerBox,
-                adderCircle, adderPlus, tableHeaderLabel, tableSizeLabel, pageTableView);
+                pageBox, wordBoxVA, blockBoxPA, wordBoxPA, pointerBox,
+                adderNode, tableHeaderLabel, tableSizeLabel, pageTableView);
 
         // ---- Dynamic connectors: the highlighted row moves within the window as pages change ----
         Polyline addressToRowLine = elbow();
@@ -185,11 +258,11 @@ public class PagedMMUTabView extends StackPane {
         // ---- Below the table: V/D/Disk fields of the highlighted row drop straight down, Block's
         // bit-width tag rides along the existing block-flow wire instead of a line of its own ----
         Line blockBitsTick = tick();
-        Label blockBitsLabel = bitLabel(viewModel.getFrameBits(), 0, 0);
+        Label blockBitsLabel = FieldBoxes.bitLabel(viewModel.getFrameBits(), 0, 0);
 
-        ColumnDrop vDrop = columnDrop(1, viewModel.currentVBitProperty());
-        ColumnDrop dDrop = columnDrop(1, viewModel.currentDBitProperty());
-        ColumnDrop diskDrop = columnDrop(viewModel.getDiskBits(), viewModel.currentDiskHexProperty());
+        ColumnDrop vDrop = columnDrop(1, viewModel.currentVBitProperty(), pageTableView.validColumnAnchorProperty().get());
+        ColumnDrop dDrop = columnDrop(1, viewModel.currentDBitProperty(), pageTableView.dirtyColumnAnchorProperty().get());
+        ColumnDrop diskDrop = columnDrop(viewModel.getDiskBits(), viewModel.currentDiskHexProperty(), pageTableView.diskColumnAnchorProperty().get());
 
         canvas.getChildren().addAll(addressToRowLine, addressLabel, blockToBoxLine, blockFlowLabel, blockBitsTick, blockBitsLabel);
         canvas.getChildren().addAll(vDrop.nodes());
@@ -207,17 +280,17 @@ public class PagedMMUTabView extends StackPane {
 
         // ---- Wires/labels only light up once the step that uses them has actually executed ----
         bindActive(pageDownLine, viewModel.lineActiveProperty(MmuLine.PAGE_TO_OFFSET));
-        bindActive(pageBitsLabel, viewModel.lineActiveProperty(MmuLine.PAGE_TO_OFFSET));
+        bindActive(offsetBrace, viewModel.lineActiveProperty(MmuLine.PAGE_TO_OFFSET));
+        bindActive(offsetMergeLine, viewModel.lineActiveProperty(MmuLine.PAGE_TO_OFFSET));
 
         bindActive(shiftDownLine, viewModel.lineActiveProperty(MmuLine.ZERO_FILL_TO_OFFSET));
         bindActive(zeroFillLabel, viewModel.lineActiveProperty(MmuLine.ZERO_FILL_TO_OFFSET));
-        bindActive(shiftBitsLabel, viewModel.lineActiveProperty(MmuLine.ZERO_FILL_TO_OFFSET));
 
         bindActive(offsetToAdder, viewModel.lineActiveProperty(MmuLine.OFFSET_TO_ADDER));
+        bindActive(offsetValueLabel, viewModel.lineActiveProperty(MmuLine.OFFSET_TO_ADDER));
         bindActive(pointerToAdder, viewModel.lineActiveProperty(MmuLine.POINTER_TO_ADDER));
 
         bindActive(adderDownStub, viewModel.lineActiveProperty(MmuLine.ADDER_TO_ROW));
-        bindActive(physBitsLabel, viewModel.lineActiveProperty(MmuLine.ADDER_TO_ROW));
         bindActive(addressToRowLine, viewModel.lineActiveProperty(MmuLine.ADDER_TO_ROW));
         bindActive(addressLabel, viewModel.lineActiveProperty(MmuLine.ADDER_TO_ROW));
 
@@ -230,9 +303,10 @@ public class PagedMMUTabView extends StackPane {
         bindActive(blockBitsTick, viewModel.lineActiveProperty(MmuLine.ROW_TO_BLOCK));
         bindActive(blockBitsLabel, viewModel.lineActiveProperty(MmuLine.ROW_TO_BLOCK));
 
-        for (ColumnDrop drop : List.of(vDrop, dDrop, diskDrop))
-            for (Node node : drop.nodes())
-                bindActive(node, viewModel.pageTableAccessedProperty());
+        for (ColumnDrop drop : List.of(vDrop, dDrop, diskDrop)) {
+            bindActive(drop.line(), viewModel.pageTableAccessedProperty());
+            bindActive(drop.valueLabel(), viewModel.pageTableAccessedProperty());
+        }
 
         ScrollPane scrollPane = new ScrollPane(canvas);
         scrollPane.getStyleClass().add("mmu-scroll-pane");
@@ -319,10 +393,11 @@ public class PagedMMUTabView extends StackPane {
             blockToBoxLine.toFront();
             blockFlowLabel.toFront();
 
-            // Block's bit-width tag rides along the top of that same wire rather than a separate line
-            positionTick(blockBitsTick, columnX, tableBottom);
-            blockBitsLabel.setLayoutX(columnX + 8);
-            blockBitsLabel.setLayoutY(tableBottom + 2);
+            // Block's bit-width tag rides that wire, pinned to the same row as the V/D/Disk drops below
+            double indicatorY = tableBottom + DROP_INDICATOR_Y;
+            positionTick(blockBitsTick, columnX, indicatorY);
+            blockBitsLabel.setLayoutX(columnX + 13);
+            blockBitsLabel.setLayoutY(indicatorY - blockBitsLabel.getHeight() / 2);
         }
 
         // =========================================================================
@@ -338,32 +413,21 @@ public class PagedMMUTabView extends StackPane {
         }
     }
 
-    // Places a drop line straight down from a table column's header, with a bit-width tick near the
-    // top and an arrowhead where it meets the value readout below.
+    // Places a drop wire straight down from a table column's header; the wire renders its own
+    // bit-width tick and the arrowhead where it meets the value readout below.
     private void positionColumnDrop(Region columnAnchor, double tableBottom, ColumnDrop drop) {
         if (columnAnchor == null || columnAnchor.getScene() == null)
             return;
 
         Bounds columnBounds = canvas.sceneToLocal(columnAnchor.localToScene(columnAnchor.getBoundsInLocal()));
         double columnX = columnBounds.getCenterX();
-        double dropBottom = tableBottom + 40;
+        double dropBottom = tableBottom + DROP_LENGTH;
 
-        drop.dropLine().setStartX(columnX);
-        drop.dropLine().setStartY(tableBottom);
-        drop.dropLine().setEndX(columnX);
-        drop.dropLine().setEndY(dropBottom);
+        drop.line().startXProperty().set(columnX);
+        drop.line().startYProperty().set(tableBottom);
+        drop.line().endXProperty().set(columnX);
+        drop.line().endYProperty().set(dropBottom);
 
-        positionTick(drop.tickMark(), columnX, tableBottom);
-
-        drop.arrow().getPoints().setAll(
-                columnX - 5, dropBottom - 7,
-                columnX, dropBottom,
-                columnX + 5, dropBottom - 7);
-
-        drop.bitsLabel().setLayoutX(columnX + 8);
-        drop.bitsLabel().setLayoutY(tableBottom + 2);
-
-        drop.valueLabel().setLayoutX(columnX - drop.valueLabel().getBoundsInLocal().getWidth() / 2 - 2);
         drop.valueLabel().setLayoutY(dropBottom + 6);
 
         for (Node node : drop.nodes())
@@ -373,29 +437,42 @@ public class PagedMMUTabView extends StackPane {
     // Short diagonal stroke crossing a wire to denote its bit width, matching the reference schematic
     private void positionTick(Line tickMark, double centerX, double centerY) {
         tickMark.setStartX(centerX - 6);
-        tickMark.setStartY(centerY + 16);
+        tickMark.setStartY(centerY + 6);
         tickMark.setEndX(centerX + 6);
-        tickMark.setEndY(centerY + 6);
+        tickMark.setEndY(centerY - 6);
     }
 
-    // A column's drop line from the table down to its resolved value: line + bit-width tick + arrowhead + labels
-    private record ColumnDrop(Line dropLine, Line tickMark, Polyline arrow, Label bitsLabel, Label valueLabel) {
+    // A column's drop from the table down to its resolved value: a self-labelling bit-width wire
+    // (line + diagonal tick + "Nb" tag + arrowhead) plus the hex value readout below it.
+    private record ColumnDrop(BitWidthLine line, Label valueLabel) {
         Node[] nodes() {
-            return new Node[] { dropLine, tickMark, arrow, bitsLabel, valueLabel };
+            return new Node[] { line, valueLabel };
         }
     }
 
-    private ColumnDrop columnDrop(int bits, StringProperty valueProperty) {
-        Line dropLine = line(0, 0, 0, 0);
-        Line tickMark = tick();
-        Polyline arrow = elbow();
-        Label bitsLabel = bitLabel(bits, 0, 0);
+    private ColumnDrop columnDrop(int bits, StringProperty valueProperty, Region columnAnchor) {
+        BitWidthLine line = bitWidthWire(bits);
 
         Label valueLabel = new Label();
         valueLabel.textProperty().bind(valueProperty);
         valueLabel.getStyleClass().add("mmu-bit-value");
 
-        return new ColumnDrop(dropLine, tickMark, arrow, bitsLabel, valueLabel);
+        valueLabel.layoutXProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> {
+            if (columnAnchor != null && columnAnchor.getScene() != null) {
+                // Fetch the live, absolute horizontal center of the table column column grid [^*]
+                Bounds b = canvas.sceneToLocal(columnAnchor.localToScene(columnAnchor.getBoundsInLocal()));
+                double currentColumnCenterX = b.getCenterX();
+                
+                // Perfect mathematical center anchoring [^*]
+                return currentColumnCenterX - (valueLabel.getWidth() / 2.0);
+            }
+            return 0.0;
+        }, 
+        valueLabel.widthProperty()            // Dependency A: Triggers when hex value string length text shifts
+         // Dependency B: Triggers when the parent grid column stretches or slides
+        ));
+
+        return new ColumnDrop(line, valueLabel);
     }
 
     private Line tick() {
@@ -426,49 +503,13 @@ public class PagedMMUTabView extends StackPane {
         return box;
     }
 
-    // Cell for a field that sits directly adjacent to a neighboring field (e.g. Page|Word), sharing a
-    // single divider border so the pair reads as one continuous box, with its title rendered separately above.
-    private Region valueCell(String edgeStyleClass, StringProperty valueProperty, int hexDigits) {
-        Label valueLabel = new Label("0x" + "0".repeat(hexDigits));
-        valueLabel.getStyleClass().add("va-breakdown-value");
-        valueLabel.setFont(FIELD_FONT);
-        valueLabel.applyCss();
-
-        double width = Math.max(MIN_FIELD_WIDTH, valueLabel.prefWidth(-1) + FIELD_PADDING);
-
-        valueLabel.textProperty().bind(valueProperty);
-
-        StackPane cell = new StackPane(valueLabel);
-        cell.getStyleClass().addAll("va-breakdown-cell", edgeStyleClass);
-        cell.setAlignment(Pos.CENTER);
-        cell.setPrefSize(width, BOX_HEIGHT);
-        cell.setMinSize(width, BOX_HEIGHT);
-        cell.setMaxSize(width, BOX_HEIGHT);
-        return cell;
-    }
-
-    private Label fieldTitle(String text, double x, double y) {
-        Label label = new Label(text);
-        label.getStyleClass().add("va-breakdown-title");
-        label.setLayoutX(x);
-        label.setLayoutY(y);
-        return label;
-    }
-
-    private Label sectionLabel(String text, double x, double y) {
-        Label label = new Label(text);
-        label.getStyleClass().add("mmu-section-label");
-        label.setLayoutX(x);
-        label.setLayoutY(y);
-        return label;
-    }
-
-    private Label bitLabel(int bits, double x, double y) {
-        Label label = new Label(bits + "b");
-        label.getStyleClass().add("mmu-bit-width");
-        label.setLayoutX(x);
-        label.setLayoutY(y);
-        return label;
+    // A straight signal wire that carries its own mid-span bit-width tag (diagonal tick + "Nb" label),
+    // replacing the old hand-placed line + tick + bitLabel trios. The tag rides on the wire's right side.
+    private BitWidthLine bitWidthWire(int bits) {
+        BitWidthLine wire = new BitWidthLine();
+        wire.bitsProperty().set(bits);
+        wire.labelOnLeftProperty().set(false);
+        return wire;
     }
 
     private Line line(double x1, double y1, double x2, double y2) {
@@ -489,8 +530,16 @@ public class PagedMMUTabView extends StackPane {
         active.addListener((obs, oldVal, newVal) -> node.pseudoClassStateChanged(ACTIVE, newVal));
     }
 
+    // Same, but reaches into a BitWidthLine so its wire, arrow head, tick and label all light up together
+    private void bindActive(BitWidthLine line, BooleanProperty active) {
+        bindActive(line.getWire(), active);
+        bindActive(line.getArrowHead(), active);
+        bindActive(line.getTick(), active);
+        bindActive(line.getBitsLabel(), active);
+    }
+
     private static double fieldWidth(int digits) {
-        Text sample = new Text("F".repeat(Math.max(digits, 1)));
+        Text sample = new Text("0x" + "F".repeat(Math.max(digits, 1)));
         sample.setFont(FIELD_FONT);
         return Math.max(MIN_FIELD_WIDTH, sample.getLayoutBounds().getWidth() + FIELD_PADDING);
     }
@@ -506,13 +555,4 @@ public class PagedMMUTabView extends StackPane {
         return sample.getLayoutBounds().getWidth();
     }
 
-    private static int hexDigits(int bits) {
-        return Math.max(1, Math.ceilDiv(bits, 4)) + 2;
-    }
-
-    // Exact digit count (no safety buffer), matching PagedMmuTabViewModel's own hex formatting exactly -
-    // safe to use as-is here since valueCell measures the real rendered label instead of estimating.
-    private static int exactHexDigits(int bits) {
-        return Math.max(1, Math.ceilDiv(bits, 4));
-    }
 }

@@ -17,7 +17,6 @@ import javafx.collections.ObservableList;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.Simulation;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
-import rs.ac.bg.etf.model.simulation.step.FormPhysicalAddressFromTLBStep;
 import rs.ac.bg.etf.model.simulation.step.InstructionFetchStep;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.page.FormPageTableAddressStep;
@@ -25,6 +24,7 @@ import rs.ac.bg.etf.model.simulation.step.page.FormPhysicalAddressFromPageTableS
 import rs.ac.bg.etf.model.simulation.step.page.PageTableLookupStep;
 import rs.ac.bg.etf.model.table.PageTable;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
+import rs.ac.bg.etf.view.util.ValueConverter;
 
 /**
  * ViewModel for the paged MMU tab: the page-table-pointer/offset/adder address computation
@@ -93,8 +93,8 @@ public class PagedMMUTabViewModel
         this.shiftBits = Integer.numberOfTrailingZeros(context.getPageTableDescriptorSize());
         this.offsetBits = pageBits + shiftBits;
 
-        blockHexDigits.set(hexDigitsFor(frameBits));
-        diskHexDigits.set(hexDigitsFor(diskBits));
+        blockHexDigits.set(ValueConverter.hexDigitsFor(frameBits));
+        diskHexDigits.set(ValueConverter.hexDigitsFor(diskBits));
 
         simulationViewModel.currentStepNumberProperty().addListener((obs, oldVal, newVal) -> refresh());
         refresh();
@@ -167,11 +167,11 @@ public class PagedMMUTabViewModel
             long offset = currentPage << shiftBits;
             long descriptorAddress = pointer + offset;
 
-            pageHex.set(toHex(currentPage, hexDigitsFor(pageBits)));
-            wordHex.set(toHex(word, hexDigitsFor(wordBits)));
-            pageTablePointerHex.set(toHex(pointer, hexDigitsFor(physicalAddressBits)));
-            descriptorOffsetHex.set(toHex(offset, hexDigitsFor(offsetBits)));
-            descriptorAddressHex.set(toHex(descriptorAddress, hexDigitsFor(physicalAddressBits)));
+            pageHex.set(toHex(currentPage, ValueConverter.hexDigitsFor(pageBits)));
+            wordHex.set(toHex(word, ValueConverter.hexDigitsFor(wordBits)));
+            pageTablePointerHex.set(toHex(pointer, ValueConverter.hexDigitsFor(physicalAddressBits)));
+            descriptorOffsetHex.set(toHex(offset, ValueConverter.hexDigitsFor(offsetBits)));
+            descriptorAddressHex.set(toHex(descriptorAddress, ValueConverter.hexDigitsFor(physicalAddressBits)));
         }
         else
         {
@@ -249,15 +249,11 @@ public class PagedMMUTabViewModel
             return EnumSet.of(MmuLine.ADDER_TO_ROW);
         if (step instanceof FormPhysicalAddressFromPageTableStep)
             return EnumSet.of(MmuLine.WORD_PASSTHROUGH, MmuLine.ROW_TO_BLOCK);
-        if (step instanceof FormPhysicalAddressFromTLBStep)
-            return EnumSet.of(MmuLine.WORD_PASSTHROUGH);
+        // A TLB hit forms the physical address without touching the page table, so this schematic
+        // stays dark for it -- that path is the TLB tab's to draw (PageFormPhysicalAddressFromTLBStep,
+        // a subclass of FormPhysicalAddressFromTLBStep, must NOT be matched here).
 
         return EnumSet.noneOf(MmuLine.class);
-    }
-
-    private static int hexDigitsFor(int bits) 
-    {
-        return Math.max(1, Math.ceilDiv(bits, 4));
     }
 
     private static String toHex(long value, int digits) 

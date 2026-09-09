@@ -1,9 +1,10 @@
 package rs.ac.bg.etf.model.tlb;
 
 /**
- * Direct-mapped TLB: each tag maps to exactly one slot, computed as (tag % size).
- * Inserting a new entry always overwrites whatever occupies that slot.
- * Empty slots are represented by null so the UI can render them as EMPTY.
+ * Direct-mapped TLB: each full lookup key maps to exactly one slot, computed from its low
+ * {@code log2(size)} bits ({@code key % size}). The remaining high {@code k@p - m} bits are the
+ * value stored in and compared against the entry's tag. Inserting a new entry always overwrites
+ * whatever occupies that slot. Empty slots are represented by null so the UI can render them as EMPTY.
  */
 public class DirectTLB extends TLB
 {
@@ -15,27 +16,40 @@ public class DirectTLB extends TLB
             entries.add(null);
         }
     }
-    
-    private int indexFor(long tag)
+
+    private int indexFor(long fullKey)
     {
-        return Math.floorMod(tag, size);
+        return Math.floorMod(fullKey, size);
     }
-    
+
+    @Override
+    public int getIndexComponentBits()
+    {
+        return Integer.numberOfTrailingZeros(size);
+    }
+
+    @Override
+    public int mappedSlot(long fullKey)
+    {
+        return indexFor(fullKey);
+    }
+
     @Override
     public TLBEntry lookup(long tag)
     {
         TLBEntry entry = entries.get(indexFor(tag));
-        if (entry != null && entry.isHit(tag))
+        if (entry != null && entry.isValid() && entry.getTag() == toStoredTag(tag))
         {
             return entry;
         }
         return null;
     }
-    
+
     @Override
     public TLBEntry insert(TLBEntry entry)
     {
         int index = indexFor(entry.getTag());
+        entry.setTag(toStoredTag(entry.getTag()));
         TLBEntry evicted = entries.get(index);
         entries.set(index, entry);
         pushInsertion(evicted, entry, index);
@@ -54,7 +68,7 @@ public class DirectTLB extends TLB
     {
         int index = indexFor(tag);
         TLBEntry entry = entries.get(index);
-        if (entry != null && entry.getTag() == tag)
+        if (entry != null && entry.getTag() == toStoredTag(tag))
         {
             entries.set(index, null);
             pushInvalidatedEntry(entry, index);
@@ -72,10 +86,11 @@ public class DirectTLB extends TLB
     @Override
     public void flushProcessTag(int processId)
     {
+        int pidShift = Math.max(0, addressBits - getIndexComponentBits());
         for (int i = 0; i < entries.size(); i++)
         {
             TLBEntry entry = entries.get(i);
-            if (entry != null && (entry.getTag() >>> addressBits) == processId)
+            if (entry != null && (entry.getTag() >>> pidShift) == processId)
             {
                 entries.set(i, null);
             }

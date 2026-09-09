@@ -1,5 +1,6 @@
 package rs.ac.bg.etf.view;
 
+import javafx.beans.property.ObjectProperty;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
@@ -18,7 +19,18 @@ import rs.ac.bg.etf.viewmodel.ConfigurationViewModel;
 public class ConfigurationView {
     private final VBox layoutContainer;
 
+    // IntegerProperty.asObject() hands back a fresh wrapper each call, and bindBidirectional
+    // only holds it weakly. Without a strong reference here the GC reclaims the wrapper and the
+    // ComboBox silently stops tracking the viewmodel property (e.g. after a config file load).
+    private final ObjectProperty<Integer> addressableUnitAsObject;
+    private final ObjectProperty<Integer> usersAsObject;
+    private final ObjectProperty<Integer> tlbEntriesPerSetAsObject;
+
     public ConfigurationView(ConfigurationViewModel viewModel) {
+        this.addressableUnitAsObject = viewModel.addressableUnitProperty().asObject();
+        this.usersAsObject = viewModel.usersProperty().asObject();
+        this.tlbEntriesPerSetAsObject = viewModel.tlbEntriesPerSetProperty().asObject();
+
         this.layoutContainer = new VBox();
         this.layoutContainer.getStyleClass().add("main-menu-container");
         this.layoutContainer.setAlignment(Pos.CENTER);
@@ -86,7 +98,7 @@ public class ConfigurationView {
         Label unitLabel = new Label("Addressable Unit (Bytes)");
         ComboBox<Integer> unitBox = new ComboBox<>();
         unitBox.getItems().addAll(1, 2, 4, 8);
-        unitBox.valueProperty().bindBidirectional(viewModel.addressableUnitProperty().asObject());
+        unitBox.valueProperty().bindBidirectional(addressableUnitAsObject);
         addressableUnitWrapper.getChildren().addAll(unitLabel, unitBox);
 
         // NEW FIELD: Users count
@@ -94,7 +106,7 @@ public class ConfigurationView {
         Label usersLabel = new Label("User Processes");
         ComboBox<Integer> usersBox = new ComboBox<>();
         usersBox.getItems().addAll(1, 2, 4, 8, 16, 32);
-        usersBox.valueProperty().bindBidirectional(viewModel.usersProperty().asObject());
+        usersBox.valueProperty().bindBidirectional(usersAsObject);
         usersWrapper.getChildren().addAll(usersLabel, usersBox);
         
 
@@ -147,7 +159,7 @@ public class ConfigurationView {
         entriesPerSetBox.getItems().addAll(2, 4);
         
         // 3. Bind the value property directly to your IntegerProperty view model token!
-        entriesPerSetBox.valueProperty().bindBidirectional(viewModel.tlbEntriesPerSetProperty().asObject());
+        entriesPerSetBox.valueProperty().bindBidirectional(tlbEntriesPerSetAsObject);
         
         entriesPerSetWrapper.getChildren().addAll(entriesPerSetLabel, entriesPerSetBox);
 
