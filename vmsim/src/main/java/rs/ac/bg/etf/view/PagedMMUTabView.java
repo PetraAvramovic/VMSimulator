@@ -18,6 +18,7 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polyline;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
+import rs.ac.bg.etf.view.inspector.PageTableInspectorWindow;
 import rs.ac.bg.etf.view.shape.BitWidthLine;
 import rs.ac.bg.etf.view.shape.CurlyBrace;
 import rs.ac.bg.etf.view.util.FieldBoxes;
@@ -182,7 +183,7 @@ public class PagedMMUTabView extends StackPane {
         offsetMergeLine.startYProperty().bind(offsetBrace.tipYProperty().add(braceGap));
 
         Label offsetValueLabel = new Label();
-        offsetValueLabel.textProperty().bind(viewModel.descriptorOffsetHexProperty());
+        offsetValueLabel.textProperty().bind(hideWhenInactive(viewModel.descriptorOffsetHexProperty(), viewModel.lineActiveProperty(MmuLine.OFFSET_TO_ADDER)));
         offsetValueLabel.getStyleClass().add("mmu-bit-value");
         offsetValueLabel.setLayoutX(mergeCenterX + 10);
         offsetValueLabel.setLayoutY(offsetLineMidY - 8);
@@ -236,6 +237,15 @@ public class PagedMMUTabView extends StackPane {
         pageTableView.setLayoutX(tableX);
         pageTableView.setLayoutY(tableY);
 
+        // Clicking the schematic's small (7-row) preview opens a separate, resizable window that
+        // browses the full table (up to 2^pageBits entries) for any user, not just the current one.
+        pageTableView.getStyleClass().add("page-table-clickable");
+        pageTableView.setCursor(javafx.scene.Cursor.HAND);
+        PageTableInspectorWindow pageTableInspector =
+                new PageTableInspectorWindow(viewModel.getContext(), viewModel.currentStepNumberProperty());
+        pageTableView.setOnMouseClicked(e ->
+                pageTableInspector.toggle(pageTableView.getScene() != null ? pageTableView.getScene().getWindow() : null));
+
         canvas.getChildren().addAll(
                 wordPassLine, pageDownLine, shiftDownLine, offsetBrace, offsetMergeLine,
                 offsetValueLabel, offsetToAdder, pointerToAdder, adderDownStub,
@@ -247,12 +257,12 @@ public class PagedMMUTabView extends StackPane {
         // ---- Dynamic connectors: the highlighted row moves within the window as pages change ----
         Polyline addressToRowLine = elbow();
         Label addressLabel = new Label();
-        addressLabel.textProperty().bind(viewModel.descriptorAddressHexProperty());
+        addressLabel.textProperty().bind(hideWhenInactive(viewModel.descriptorAddressHexProperty(), viewModel.lineActiveProperty(MmuLine.ADDER_TO_TABLE)));
         addressLabel.getStyleClass().add("mmu-bit-value");
 
         Polyline blockToBoxLine = elbow();
         Label blockFlowLabel = new Label();
-        blockFlowLabel.textProperty().bind(viewModel.blockHexProperty());
+        blockFlowLabel.textProperty().bind(hideWhenInactive(viewModel.blockHexProperty(), viewModel.lineActiveProperty(MmuLine.ROW_TO_BLOCK)));
         blockFlowLabel.getStyleClass().add("mmu-bit-value");
 
         // ---- Below the table: V/D/Disk fields of the highlighted row drop straight down, Block's
@@ -260,9 +270,9 @@ public class PagedMMUTabView extends StackPane {
         Line blockBitsTick = tick();
         Label blockBitsLabel = FieldBoxes.bitLabel(viewModel.getFrameBits(), 0, 0);
 
-        ColumnDrop vDrop = columnDrop(1, viewModel.currentVBitProperty(), pageTableView.validColumnAnchorProperty().get());
-        ColumnDrop dDrop = columnDrop(1, viewModel.currentDBitProperty(), pageTableView.dirtyColumnAnchorProperty().get());
-        ColumnDrop diskDrop = columnDrop(viewModel.getDiskBits(), viewModel.currentDiskHexProperty(), pageTableView.diskColumnAnchorProperty().get());
+        ColumnDrop vDrop = columnDrop(1, viewModel.currentVBitProperty(), viewModel.pageTableAccessedProperty(), pageTableView.validColumnAnchorProperty().get());
+        ColumnDrop dDrop = columnDrop(1, viewModel.currentDBitProperty(), viewModel.pageTableAccessedProperty(), pageTableView.dirtyColumnAnchorProperty().get());
+        ColumnDrop diskDrop = columnDrop(viewModel.getDiskBits(), viewModel.currentDiskHexProperty(), viewModel.pageTableAccessedProperty(), pageTableView.diskColumnAnchorProperty().get());
 
         canvas.getChildren().addAll(addressToRowLine, addressLabel, blockToBoxLine, blockFlowLabel, blockBitsTick, blockBitsLabel);
         canvas.getChildren().addAll(vDrop.nodes());
@@ -290,9 +300,9 @@ public class PagedMMUTabView extends StackPane {
         bindActive(offsetValueLabel, viewModel.lineActiveProperty(MmuLine.OFFSET_TO_ADDER));
         bindActive(pointerToAdder, viewModel.lineActiveProperty(MmuLine.POINTER_TO_ADDER));
 
-        bindActive(adderDownStub, viewModel.lineActiveProperty(MmuLine.ADDER_TO_ROW));
-        bindActive(addressToRowLine, viewModel.lineActiveProperty(MmuLine.ADDER_TO_ROW));
-        bindActive(addressLabel, viewModel.lineActiveProperty(MmuLine.ADDER_TO_ROW));
+        bindActive(adderDownStub, viewModel.lineActiveProperty(MmuLine.ADDER_TO_TABLE));
+        bindActive(addressToRowLine, viewModel.lineActiveProperty(MmuLine.ADDER_TO_TABLE));
+        bindActive(addressLabel, viewModel.lineActiveProperty(MmuLine.ADDER_TO_TABLE));
 
         bindActive(wordPassLine, viewModel.lineActiveProperty(MmuLine.WORD_PASSTHROUGH));
         bindActive(wordBitsStart, viewModel.lineActiveProperty(MmuLine.WORD_PASSTHROUGH));
@@ -309,7 +319,7 @@ public class PagedMMUTabView extends StackPane {
         }
 
         ScrollPane scrollPane = new ScrollPane(canvas);
-        scrollPane.getStyleClass().add("mmu-scroll-pane");
+        scrollPane.getStyleClass().addAll("mmu-scroll-pane", "slim-scroll");
 
         getChildren().add(scrollPane);
     }
@@ -450,11 +460,11 @@ public class PagedMMUTabView extends StackPane {
         }
     }
 
-    private ColumnDrop columnDrop(int bits, StringProperty valueProperty, Region columnAnchor) {
+    private ColumnDrop columnDrop(int bits, StringProperty valueProperty, BooleanProperty activeProperty, Region columnAnchor) {
         BitWidthLine line = bitWidthWire(bits);
 
         Label valueLabel = new Label();
-        valueLabel.textProperty().bind(valueProperty);
+        valueLabel.textProperty().bind(hideWhenInactive(valueProperty, activeProperty));
         valueLabel.getStyleClass().add("mmu-bit-value");
 
         valueLabel.layoutXProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> {
@@ -522,6 +532,12 @@ public class PagedMMUTabView extends StackPane {
         Polyline polyline = new Polyline(points);
         polyline.getStyleClass().add("connector-line");
         return polyline;
+    }
+
+    // Wire-borne value readouts only make sense once their step has actually run; blank them out rather
+    // than showing a "/" placeholder, unlike the VA/PA field boxes which keep "/" as an empty-state cue.
+    private javafx.beans.binding.StringExpression hideWhenInactive(StringProperty valueProperty, BooleanProperty active) {
+        return javafx.beans.binding.Bindings.when(active).then(valueProperty).otherwise("");
     }
 
     // Toggles the ":active" pseudo-class so CSS can style a connector/label differently once its step has run

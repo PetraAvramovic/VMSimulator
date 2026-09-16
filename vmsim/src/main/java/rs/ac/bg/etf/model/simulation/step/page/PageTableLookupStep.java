@@ -4,6 +4,8 @@ import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.memory.Instruction.AccessType;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 import rs.ac.bg.etf.model.table.PageTable;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
@@ -41,13 +43,14 @@ public class PageTableLookupStep<T extends PageSimulationContext> extends Simula
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
         if (!lookupResult.isValid())
-            return String.format("Page table lookup: page %d not valid (page fault).", lookupResult.getPage());
+            return new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_FAULT, lookupResult.getPage());
 
-        return String.format("Page table lookup: page %d -> frame 0x%X%s.",
-                lookupResult.getPage(), lookupResult.getBlock(), lookupResult.isDirty() ? " (dirty)" : "");
+        return lookupResult.isDirty()
+                ? new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_HIT_DIRTY, lookupResult.getPage(), lookupResult.getBlock())
+                : new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_HIT, lookupResult.getPage(), lookupResult.getBlock());
     }
 
 }

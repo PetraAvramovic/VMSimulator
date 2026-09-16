@@ -21,6 +21,13 @@ public class PageSimulationContext extends SimulationContext
     private long currentDescriptorAddress = 0;
 
     private PageTableDescriptor currentDescriptor = null;
+    private long currentFrame = -1;
+    // Set only by PageLoadIntoMemoryStep, at the disk address of the page it is loading.
+    // Deliberately separate from currentDescriptor: that field is shared scratch state that
+    // an unrelated (later) instruction's PageFaultStep.undo() can null out during a
+    // multi-instruction rewind, which would otherwise blank this display value even while
+    // this instruction's load step is still the active one.
+    private long currentLoadDiskAddress = -1;
 
     public PageSimulationContext(SimulationConfig config) 
     {
@@ -173,6 +180,26 @@ public class PageSimulationContext extends SimulationContext
     public void setCurrentDescriptor(PageTableDescriptor currentDescriptor)
      {
         this.currentDescriptor = currentDescriptor;
+    }
+
+    public long getCurrentFrame()
+    {
+        return currentFrame;
+    }
+
+    public void setCurrentFrame(long currentFrame)
+    {
+        this.currentFrame = currentFrame;
+    }
+
+    public long getCurrentLoadDiskAddress()
+    {
+        return currentLoadDiskAddress;
+    }
+
+    public void setCurrentLoadDiskAddress(long currentLoadDiskAddress)
+    {
+        this.currentLoadDiskAddress = currentLoadDiskAddress;
     }
 
     public PageTable getPageTable(int user)

@@ -56,14 +56,14 @@ public abstract class TLBUpdateStep<T extends SimulationContext> extends Simulat
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
         if (evicted == null)
-            return "Inserted new TLB entry.";
+            return new StepDescription(StepDescriptionKey.TLB_INSERTED);
 
         return wasDirty
-                ? "Inserted new TLB entry (evicted a dirty entry; wrote back to page table)."
-                : "Inserted new TLB entry (evicted an entry).";
+                ? new StepDescription(StepDescriptionKey.TLB_INSERTED_EVICTED_DIRTY)
+                : new StepDescription(StepDescriptionKey.TLB_INSERTED_EVICTED_CLEAN);
     }
 
     

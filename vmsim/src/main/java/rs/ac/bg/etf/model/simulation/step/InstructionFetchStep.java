@@ -7,9 +7,16 @@ import rs.ac.bg.etf.model.simulation.SimulationContext;
 
 public abstract class InstructionFetchStep<T extends SimulationContext> extends SimulationStep<T>
 {
-    // Captured on execute() so getDescription() stays valid after undo() has stepped the
+    // Captured on execute() so getStepDescription() stays valid after undo() has stepped the
     // instruction pointer back off this instruction (and possibly before the first one).
     private Instruction fetchedInstruction;
+
+    // The previous instruction's physical address lingers in the context until this instruction's
+    // own FormPhysicalAddressFrom*Step runs; without clearing it here, the MMU/Memory tabs would
+    // keep showing the stale address for the whole gap between fetch and that step. Saved here so
+    // undo() can restore exactly what was there before (the same pattern FormPhysicalAddressFrom*Step
+    // itself already uses for its own save/restore).
+    private long previousPhysicalAddress = -1;
 
     protected InstructionFetchStep(T context)
     {
@@ -27,6 +34,9 @@ public abstract class InstructionFetchStep<T extends SimulationContext> extends 
         context.nextInstruction();
         fetchedInstruction = context.getCurrentInstruction();
 
+        previousPhysicalAddress = context.getCurrentPhysicalAddress();
+        context.setCurrentPhysicalAddress(-1);
+
         return nextStep();
     }
 
@@ -36,13 +46,20 @@ public abstract class InstructionFetchStep<T extends SimulationContext> extends 
     public void undo()
     {
         context.previousInstruction();
+        context.setCurrentPhysicalAddress(previousPhysicalAddress);
     }
 
     @Override
-    public String getDescription()
+    public boolean isFirst()
+    {
+        return true;
+    }
+
+    @Override
+    public StepDescription getStepDescription()
     {
         Instruction instruction = fetchedInstruction != null ? fetchedInstruction : context.getCurrentInstruction();
-        return String.format("Fetched instruction: %s 0x%X (user %d).",
+        return new StepDescription(StepDescriptionKey.INSTRUCTION_FETCHED,
                 instruction.getAccessType(), instruction.getVirtualAddress(), instruction.getUser());
     }
 

@@ -17,8 +17,18 @@ import java.io.File;
 import rs.ac.bg.etf.model.simulation.exceptions.InvalidConfig;
 import rs.ac.bg.etf.model.memory.Instruction;
 
-public class SimulationConfig 
+public class SimulationConfig
 {
+    // Upper bound on physicalAddressBits - wordBits (i.e. log2 of the physical frame count).
+    // PageOSMemoryManager tracks frames sparsely (see getFreeFrame()/allocateAndLock()), so this
+    // isn't chasing a performance cliff -- 32 is just a round, memorable ceiling (a full 32-bit
+    // frame space) comfortably clear of the 62-bit MAX_VIRTUAL_ADDRESS_BITS ceiling below.
+    private static final int MAX_FRAME_BITS = 32;
+    // Upper bound on the combined virtual address width (wordBits + pageBits, or + segmentBits).
+    // Must stay under 63 so virtual addresses fit in a non-negative long; capped a bit below that
+    // hard ceiling for the same "stay usable" reason as MAX_FRAME_BITS.
+    private static final int MAX_VIRTUAL_ADDRESS_BITS = 62;
+
     public enum TranslationType
     {
         PAGED,
@@ -49,9 +59,12 @@ public class SimulationConfig
     private int tlbSize = -1;
     private int tlbEntriesPerSet = -1;
 
-    private ArrayList<Instruction> instructions;
+    // Default to empty (not null) like pageTables below: a config with valid parameters but no
+    // loaded file (or a file that simply omits these sections) must still hand back a usable,
+    // iterable list rather than forcing every caller to null-check.
+    private ArrayList<Instruction> instructions = new ArrayList<>();
     //private ArrayList<MemoryInitializationBlock> memoryInit;
-    private ArrayList<InitialPage> initialPages;
+    private ArrayList<InitialPage> initialPages = new ArrayList<>();
     private Map<Integer, Map<Long, PageTableDescriptorInit>> pageTables = new HashMap<>();
 
     public static record MemoryInitializationBlock(
@@ -104,47 +117,97 @@ public class SimulationConfig
         {
             throw new InvalidConfig("wordBits is required");
         }
+        if (wordBits >= physicalAddressBits)
+        {
+            throw new InvalidConfig(
+                "wordBits (" + wordBits + ") must be less than physicalAddressBits (" + physicalAddressBits
+                + "); physical memory must have at least one frame bit"
+            );
+        }
+        if (physicalAddressBits - wordBits > MAX_FRAME_BITS)
+        {
+            throw new InvalidConfig(
+                "physicalAddressBits - wordBits (" + (physicalAddressBits - wordBits) + ") exceeds the supported "
+                + "maximum of " + MAX_FRAME_BITS + " frame bits (" + (1L << MAX_FRAME_BITS) + " frames)"
+            );
+        }
         if (!isPowerOfTwo(tlbSize))
         {
             throw new InvalidConfig("tlbSize is required and must be a power of 2");
         }
-
-        if (translationType == TranslationType.PAGED || translationType == TranslationType.SEGMENTED_PAGED)
+        if (addressableUnit <= 0 || addressableUnit > 8 || !isPowerOfTwo(addressableUnit))
         {
-            if (pageBits <= 0)
-            {
-                throw new InvalidConfig("pageBits is required for " + translationType);
-            }
+            throw new InvalidConfig("addressableUnit must be a power of 2 between 1 and 8 (bytes)");
         }
+
         if (translationType == TranslationType.SEGMENTED || translationType == TranslationType.SEGMENTED_PAGED)
         {
-            if (segmentBits <= 0)
+            throw new InvalidConfig(translationType + " translation is not yet supported; use PAGED");
+        }
+
+        // Only PAGED reaches this point; SEGMENTED and SEGMENTED_PAGED were rejected above.
+        if (pageBits <= 0)
+        {
+            throw new InvalidConfig("pageBits is required for " + translationType);
+        }
+
+        if (getVirtualMemoryBits() > MAX_VIRTUAL_ADDRESS_BITS)
+        {
+            throw new InvalidConfig(
+                "Combined virtual address width (" + getVirtualMemoryBits() + " bits) exceeds the supported "
+                + "maximum of " + MAX_VIRTUAL_ADDRESS_BITS + " bits"
+            );
+        }
+
+        if (tlbType == TLBType.SET_ASSOCIATIVE)
+        {
+            if (!isPowerOfTwo(tlbEntriesPerSet))
             {
-                throw new InvalidConfig("segmentBits is required for " + translationType);
+                throw new InvalidConfig("tlbEntriesPerSet is required and must be a power of 2 for SET_ASSOCIATIVE");
+            }
+            if (tlbEntriesPerSet > tlbSize)
+            {
+                throw new InvalidConfig("tlbEntriesPerSet (" + tlbEntriesPerSet + ") cannot exceed tlbSize (" + tlbSize + ")");
             }
         }
 
-        if (tlbType == TLBType.SET_ASSOCIATIVE && !isPowerOfTwo(tlbEntriesPerSet))
-        {
-            throw new InvalidConfig("tlbEntriesPerSet is required and must be a power of 2 for SET_ASSOCIATIVE");
-        }
+        long maxPages = 1L << pageBits;
 
-        // Validate initialPages content fits within page size
+        // Validate initialPages: userId/page bounds, content offsets fit within a page, and
+        // content values fit within a single memory word (addressableUnit * 8 bits)
         if (initialPages != null && !initialPages.isEmpty())
         {
             long pageSize = 1L << wordBits; // Page size in addressable units
             for (int i = 0; i < initialPages.size(); i++)
             {
                 InitialPage page = initialPages.get(i);
+                String label = "InitialPage[" + i + "] (userId=" + page.userId() + ", page=" + page.page() + ")";
+
+                if (page.userId() < 0 || page.userId() >= numberOfUsers)
+                {
+                    throw new InvalidConfig(label + " has userId out of range [0, " + numberOfUsers + ")");
+                }
+                if (page.page() < 0 || page.page() >= maxPages)
+                {
+                    throw new InvalidConfig(label + " has page out of range [0, " + maxPages + ")");
+                }
+
                 if (page.content() != null && !page.content().isEmpty())
                 {
-                    for (Long offset : page.content().keySet())
+                    for (Map.Entry<Long, Long> contentEntry : page.content().entrySet())
                     {
+                        long offset = contentEntry.getKey();
                         if (offset < 0 || offset >= pageSize)
                         {
                             throw new InvalidConfig(
-                                "InitialPage[" + i + "] (userId=" + page.userId() + ", page=" + page.page() + ") "
-                                + "has content at offset " + offset + " which exceeds page size " + pageSize
+                                label + " has content at offset " + offset + " which exceeds page size " + pageSize
+                            );
+                        }
+                        if (!valueFitsInAddressableUnit(contentEntry.getValue()))
+                        {
+                            throw new InvalidConfig(
+                                label + " has content value " + contentEntry.getValue() + " at offset " + offset
+                                + " which does not fit in a " + (addressableUnit * 8) + "-bit addressable unit"
                             );
                         }
                     }
@@ -152,26 +215,48 @@ public class SimulationConfig
             }
         }
 
-        // Validate that multiple valid page table descriptors don't reference the same frame
+        // Validate pageTables: userId/page bounds, non-negative frames, and that multiple valid
+        // descriptors don't reference the same frame
         if (pageTables != null && !pageTables.isEmpty())
         {
             Map<Long, String> frameReferences = new HashMap<>(); // block -> "userId:page"
-            
+
             for (Map.Entry<Integer, Map<Long, PageTableDescriptorInit>> userEntry : pageTables.entrySet())
             {
                 int userId = userEntry.getKey();
+                if (userId < 0 || userId >= numberOfUsers)
+                {
+                    throw new InvalidConfig("pageTables contains userId " + userId + " out of range [0, " + numberOfUsers + ")");
+                }
+
                 Map<Long, PageTableDescriptorInit> pageMap = userEntry.getValue();
-                
+
                 for (Map.Entry<Long, PageTableDescriptorInit> pageEntry : pageMap.entrySet())
                 {
                     long pageNum = pageEntry.getKey();
                     PageTableDescriptorInit descriptor = pageEntry.getValue();
-                    
+
+                    if (pageNum < 0 || pageNum >= maxPages)
+                    {
+                        throw new InvalidConfig(
+                            "Page table descriptor for user " + userId + " references page " + pageNum
+                            + " out of range [0, " + maxPages + ")"
+                        );
+                    }
+
                     if (descriptor.valid())
                     {
                         long block = descriptor.block();
+                        if (block < 0)
+                        {
+                            throw new InvalidConfig(
+                                "Page table descriptor for user " + userId + ", page " + String.format("0x%X", pageNum)
+                                + " references a negative frame " + block
+                            );
+                        }
+
                         String reference = userId + ":" + pageNum;
-                        
+
                         if (frameReferences.containsKey(block))
                         {
                             String existingRef = frameReferences.get(block);
@@ -186,8 +271,54 @@ public class SimulationConfig
             }
         }
 
+        // Validate instructions: user id, virtual address width, and (for writes) that the value
+        // fits within a single memory word
+        if (instructions != null && !instructions.isEmpty())
+        {
+            long virtualMemorySize = getVirtualMemorySize();
+
+            for (int i = 0; i < instructions.size(); i++)
+            {
+                Instruction instruction = instructions.get(i);
+                String label = "Instruction[" + i + "]";
+
+                if (instruction.getUser() < 0 || instruction.getUser() >= numberOfUsers)
+                {
+                    throw new InvalidConfig(
+                        label + " has user " + instruction.getUser() + " out of range [0, " + numberOfUsers + ")"
+                    );
+                }
+                if (instruction.getVirtualAddress() < 0 || instruction.getVirtualAddress() >= virtualMemorySize)
+                {
+                    throw new InvalidConfig(
+                        label + " has virtual address " + String.format("0x%X", instruction.getVirtualAddress())
+                        + " which exceeds the virtual address space size " + String.format("0x%X", virtualMemorySize)
+                    );
+                }
+                if (instruction.getAccessType() == Instruction.AccessType.WR
+                    && !valueFitsInAddressableUnit(instruction.getValue()))
+                {
+                    throw new InvalidConfig(
+                        label + " has write value " + instruction.getValue()
+                        + " which does not fit in a " + (addressableUnit * 8) + "-bit addressable unit"
+                    );
+                }
+            }
+        }
+
         // Validate that there is enough consecutive space for kernel structures (page tables)
         validatePageTableSpace();
+    }
+
+    /** Whether {@code value} fits in the {@code addressableUnit * 8}-bit width of one memory word. */
+    private boolean valueFitsInAddressableUnit(long value)
+    {
+        int bits = addressableUnit * 8;
+        if (bits >= 64)
+        {
+            return true; // a full long already fits in a word this wide
+        }
+        return value >= 0 && value < (1L << bits);
     }
 
     /**
@@ -203,19 +334,25 @@ public class SimulationConfig
 
         // Track occupied frames as ranges: SortedMap of start -> end (inclusive)
         SortedMap<Long, Long> occupiedRanges = new TreeMap<>();
-        
+        // Track which descriptor (user, page) originally referenced each frame
+        Map<Long, long[]> frameOrigins = new HashMap<>(); // frame -> {userId, pageNum}
+
         if (pageTables != null && !pageTables.isEmpty())
         {
             for (Map.Entry<Integer, Map<Long, PageTableDescriptorInit>> userEntry : pageTables.entrySet())
             {
+                int userId = userEntry.getKey();
                 Map<Long, PageTableDescriptorInit> pageMap = userEntry.getValue();
-                
-                for (PageTableDescriptorInit descriptor : pageMap.values())
+
+                for (Map.Entry<Long, PageTableDescriptorInit> pageEntry : pageMap.entrySet())
                 {
+                    PageTableDescriptorInit descriptor = pageEntry.getValue();
+
                     if (descriptor.valid())
                     {
                         long block = descriptor.block();
                         occupiedRanges.put(block, block);
+                        frameOrigins.put(block, new long[] { userId, pageEntry.getKey() });
                     }
                 }
             }
@@ -230,7 +367,11 @@ public class SimulationConfig
         {
             if (endFrame >= totalFrames)
             {
-                throw new InvalidConfig("Page table descriptor references frame " + endFrame + " which exceeds physical memory");
+                long[] origin = frameOrigins.get(endFrame);
+                throw new InvalidConfig(
+                    "Page table descriptor for user " + origin[0] + ", page " + String.format("0x%X", origin[1])
+                    + " references frame " + String.format("0x%X", endFrame) + " which exceeds physical memory"
+                );
             }
         }
 
@@ -248,9 +389,9 @@ public class SimulationConfig
         {
             throw new InvalidConfig(
                 "Kernel structures would consume all available physical memory, leaving no space for user data. " +
-                "Need " + totalKernelFrames + " frames for " + numberOfUsers + " page tables, but only " + 
-                totalFrames + " frames available. " +
-                "Each page table requires " + framesPerPageTable + " frames " +
+                "Need " + pluralize(totalKernelFrames, "frame") + " for " + pluralize(numberOfUsers, "page table")
+                + ", but only " + pluralize(totalFrames, "frame") + " available. " +
+                "Each page table requires " + pluralize(framesPerPageTable, "frame") + " " +
                 "(descriptor size: " + descriptorSize + " AU, max pages: " + maxPages + ")"
             );
         }
@@ -305,12 +446,18 @@ public class SimulationConfig
         if (pageTablesFitted < totalPageTablesNeeded)
         {
             throw new InvalidConfig(
-                "Insufficient space for all page tables. Need " + totalPageTablesNeeded + 
-                " page tables but could only fit " + pageTablesFitted + ". " +
-                "Each page table requires " + framesPerPageTable + " consecutive frames " +
+                "Insufficient space for all page tables. Need " + pluralize(totalPageTablesNeeded, "page table") +
+                " but could only fit " + pageTablesFitted + ". " +
+                "Each page table requires " + pluralize(framesPerPageTable, "consecutive frame") + " " +
                 "(size: " + singlePageTableSize + " AU, descriptor size: " + descriptorSize + " AU, max pages: " + maxPages + ")"
             );
         }
+    }
+
+    /** {@code count} followed by {@code singular}, pluralized ("1 frame" vs. "2 frames"). */
+    private static String pluralize(long count, String singular)
+    {
+        return count + " " + singular + (count == 1 ? "" : "s");
     }
 
     /**
@@ -436,7 +583,7 @@ public class SimulationConfig
 
     public long getVirtualMemorySize()
     {
-        return 1 << getVirtualMemoryBits();
+        return 1L << getVirtualMemoryBits();
     }
     
     public TranslationType getTranslationType() {

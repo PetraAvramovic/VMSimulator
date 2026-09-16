@@ -76,9 +76,11 @@ public class PagedTLBTabViewModel
     private final StringProperty pageHex = new SimpleStringProperty("/");
     private final StringProperty wordHex = new SimpleStringProperty("/");
     // fullTagHex is the whole user@page key coming out of the merge brace; tagHex is the reduced
-    // k@p - m value that survives the direct-mapped split.
+    // k@p - m value that survives the direct-mapped split; indexValue is the complementary low m
+    // bits the split routes into the row/set index instead.
     private final StringProperty fullTagHex = new SimpleStringProperty("/");
     private final StringProperty tagHex = new SimpleStringProperty("/");
+    private final StringProperty indexValue = new SimpleStringProperty("/");
     private final StringProperty blockHex = new SimpleStringProperty("/");
     private final StringProperty paWordHex = new SimpleStringProperty("/");
 
@@ -106,6 +108,7 @@ public class PagedTLBTabViewModel
     // window helpers below stay correct for every TLB flavour.
     private final int entriesPerSet;
     private final int numSets;
+    private final IntegerProperty currentStepNumber;
 
     public PagedTLBTabViewModel(PageSimulationContext context, SimulationViewModel simulationViewModel)
     {
@@ -113,6 +116,7 @@ public class PagedTLBTabViewModel
         this.tlb = context.getTLB();
         this.sat = tlb instanceof SetAssociativeTLB setAssociative ? setAssociative : null;
         this.simulation = simulationViewModel.getSimulation();
+        this.currentStepNumber = simulationViewModel.currentStepNumberProperty();
 
         for (TlbLine line : TlbLine.values())
             lineActive.put(line, new SimpleBooleanProperty(false));
@@ -136,6 +140,11 @@ public class PagedTLBTabViewModel
         simulationViewModel.currentStepNumberProperty().addListener((obs, oldVal, newVal) -> refresh());
         refresh();
     }
+
+    /** The underlying simulation context, for a TLB inspector window opened off the schematic. */
+    public PageSimulationContext getContext() { return context; }
+
+    public IntegerProperty currentStepNumberProperty() { return currentStepNumber; }
 
     public int getMaxVisibleRows()
     {
@@ -190,6 +199,8 @@ public class PagedTLBTabViewModel
     /** Whole user@page key value out of the merge brace ("/" until the address is formed). */
     public StringProperty fullTagHexProperty() { return fullTagHex; }
     public StringProperty tagHexProperty() { return tagHex; }
+    /** Low index-bits slice of the key routed into the row/set select ("/" until the address is formed). */
+    public StringProperty indexValueProperty() { return indexValue; }
     public StringProperty blockHexProperty() { return blockHex; }
     public StringProperty paWordHexProperty() { return paWordHex; }
 
@@ -227,6 +238,8 @@ public class PagedTLBTabViewModel
             fullTagHex.set(addressFormed
                     ? toHex(fullTag, ValueConverter.hexDigitsFor(processIdBits + pageBits)) : "/");
             tagHex.set(addressFormed ? toHex(shownTag, tagHexDigits.get()) : "/");
+            long index = indexBits > 0 ? (fullTag & ((1L << indexBits) - 1)) : 0;
+            indexValue.set(addressFormed ? toHex(index, ValueConverter.hexDigitsFor(indexBits)) : "/");
 
             TLBEntry entry = tlb.lookup(fullTag);
             blockHex.set(blockFormed && entry != null ? toHex(entry.getBlock(), blockHexDigits.get()) : "/");
@@ -239,6 +252,7 @@ public class PagedTLBTabViewModel
             wordHex.set("/");
             fullTagHex.set("/");
             tagHex.set("/");
+            indexValue.set("/");
             blockHex.set("/");
             paWordHex.set("/");
         }

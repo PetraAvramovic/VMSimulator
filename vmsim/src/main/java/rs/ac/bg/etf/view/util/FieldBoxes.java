@@ -7,6 +7,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
 
 /**
  * Shared factory for the address-breakdown field boxes and their satellite labels used by the
@@ -16,7 +17,7 @@ public final class FieldBoxes {
     // Must match .va-breakdown-value's actual CSS weight/size, otherwise width estimates undershoot
     // the real rendered text and values get clipped to an ellipsis.
     public static final Font FIELD_FONT = Font.font("Consolas", FontWeight.BOLD, 15);
-    public static final double FIELD_PADDING = 36;
+    public static final double FIELD_PADDING = 40;
     public static final double MIN_FIELD_WIDTH = 70;
     // Boxes are forced to this exact height (padding 10px*2 + border 2px*2 + title/value text) so the
     // fixed-coordinate connector lines below always line up with the real rendered box edges.
@@ -28,13 +29,18 @@ public final class FieldBoxes {
     // Cell for a field that sits directly adjacent to a neighboring field (e.g. Page|Word), sharing a
     // single divider border so the pair reads as one continuous box, with its title rendered separately above.
     public static Region valueCell(String edgeStyleClass, StringProperty valueProperty, int hexDigits) {
-        Label valueLabel = new Label("0x" + "0".repeat(hexDigits));
+        // Measured via a standalone Text node, not the Label itself -- Label.prefWidth() relies on
+        // its Skin, which isn't reliably resolved before the node is ever attached to a live Scene
+        // (as is the case here, mid-construction), and silently underestimates. Text.getLayoutBounds()
+        // computes straight from font metrics and needs no Scene, the same technique WidthCalculator
+        // already uses for the table columns.
+        Text sample = new Text("0x" + "0".repeat(hexDigits));
+        sample.setFont(FIELD_FONT);
+        double width = Math.max(MIN_FIELD_WIDTH, sample.getLayoutBounds().getWidth() + FIELD_PADDING);
+
+        Label valueLabel = new Label();
         valueLabel.getStyleClass().add("va-breakdown-value");
         valueLabel.setFont(FIELD_FONT);
-        valueLabel.applyCss();
-
-        double width = Math.max(MIN_FIELD_WIDTH, valueLabel.prefWidth(-1) + FIELD_PADDING);
-
         valueLabel.textProperty().bind(valueProperty);
 
         StackPane cell = new StackPane(valueLabel);

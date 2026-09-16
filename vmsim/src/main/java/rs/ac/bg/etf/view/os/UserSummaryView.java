@@ -53,6 +53,7 @@ public class UserSummaryView extends VBox
     private static Label cell(String text, double width)
     {
         Label label = new Label(text);
+        label.getStyleClass().add("os-user-summary-cell");
         if (width > 0)
             label.setPrefWidth(width);
         return label;

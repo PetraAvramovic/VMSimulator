@@ -2,6 +2,8 @@ package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
 public class PageTableUpdateDirtyBitStep<T extends PageSimulationContext> extends SimulationStep<T> 
@@ -29,9 +31,9 @@ public class PageTableUpdateDirtyBitStep<T extends PageSimulationContext> extend
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
-        return String.format("Set dirty bit for page %d in page table.", descriptor.getPage());
+        return new StepDescription(StepDescriptionKey.PAGE_TABLE_DIRTY_BIT_UPDATED, descriptor.getPage());
     }
 
     

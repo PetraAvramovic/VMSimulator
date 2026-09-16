@@ -15,7 +15,14 @@ public abstract class SimulationStep<T extends SimulationContext>
     public abstract void undo();
 
     /**
-     * Human-readable description of the action this step performed, read after execute() runs.
+     * Locale-free description of the action this step performed, read after execute() runs.
+     * The view layer turns this into displayable text.
      */
-    public abstract String getDescription();
+    public abstract StepDescription getStepDescription();
+
+    /** True for the step that starts a new instruction (only {@link InstructionFetchStep}). */
+    public boolean isFirst()
+    {
+        return false;
+    }
 }

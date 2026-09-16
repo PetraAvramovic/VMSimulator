@@ -7,28 +7,37 @@ import rs.ac.bg.etf.model.memory.Memory;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
 
-public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends SimulationStep<T> 
+public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends SimulationStep<T>
 {
     private long frame;
     private long previousFrame;
     private SortedMap<Long, Long> previousBlock;
 
-    public PageLoadIntoMemoryStep(T context, long frame) 
+    // Captured at execute() time: undo() / getStepDescription() must NOT re-read
+    // context.getCurrentDescriptor(), which is mutable and gets nulled by an earlier
+    // instruction's PageFaultStep.undo() during a multi-instruction rewind.
+    private PageTableDescriptor descriptor;
+    private int user;
+    private long page;
+
+    public PageLoadIntoMemoryStep(T context, long frame)
     {
         super(context);
         this.frame = frame;
     }
 
     @Override
-    public SimulationStep<T> execute() 
+    public SimulationStep<T> execute()
     {
         PageOSMemoryManager memoryManager = context.getOSMemoryManager();
         Disk disk = context.getDisk();
         Memory memory = context.getMemory();
-        PageTableDescriptor descriptor = context.getCurrentDescriptor();
+        descriptor = context.getCurrentDescriptor();
 
         long diskAddress = descriptor.getDisk();
         SortedMap<Long, Long> block = disk.readBlock(diskAddress);
@@ -41,42 +50,36 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
         descriptor.setValid(true);
         descriptor.setBlock(frame);
 
-        int user = context.getCurrentInstruction().getUser();
-        long page = context.getPageComponent();
+        user = context.getCurrentInstruction().getUser();
+        page = context.getPageComponent();
 
         memoryManager.allocate(frame, user, page, descriptor);
+
+        context.setCurrentFrame(frame);
+        context.setCurrentLoadDiskAddress(diskAddress);
 
         return new FormPhysicalAddressFromPageTableStep<T>(context, descriptor);
     }
 
     @Override
-    public void undo() 
+    public void undo()
     {
         PageOSMemoryManager memoryManager = context.getOSMemoryManager();
         Memory memory = context.getMemory();
-        PageTableDescriptor descriptor = context.getCurrentDescriptor();
 
         long memoryAddress = frame << context.getWordBits();
         memory.writeBlock(memoryAddress, previousBlock);
 
         descriptor.setValid(false);
         descriptor.setBlock(previousFrame);
-        
+
         memoryManager.undoAllocation(frame);
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
-        PageTableDescriptor descriptor = context.getCurrentDescriptor();
-        return String.format("Loaded page %d from disk into frame 0x%X.", descriptor.getPage(), frame);
+        return new StepDescription(StepDescriptionKey.PAGE_LOADED_INTO_MEMORY, page, frame);
     }
 
-    /** The frame the faulting page is loaded into. */
-    public long getFrame()
-    {
-        return frame;
-    }
-
-    
 }

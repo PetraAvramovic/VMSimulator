@@ -1,0 +1,351 @@
+package rs.ac.bg.etf.view.util;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Function;
+
+import javafx.application.Platform;
+import javafx.beans.property.LongProperty;
+import javafx.beans.property.SimpleLongProperty;
+import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
+import javafx.geometry.Pos;
+import javafx.scene.control.Label;
+import javafx.scene.control.ScrollBar;
+import javafx.scene.control.TextField;
+import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
+
+/**
+ * A vertically-scrollable table over a {@link WindowedRowSource} of up to {@code Long.MAX_VALUE}
+ * logical entries, without ever materialising more than a screenful of row nodes -- the same
+ * windowed idiom {@code FrameTableView} uses for physical memory (see its own class doc), pulled
+ * out into a reusable, column-agnostic component so any other address-scale table can reuse it by
+ * supplying its own {@link WindowedTableColumn} list and {@link WindowedRowSource} (a page table
+ * today; a future segment table just needs its own row type + source, no changes here).
+ *
+ * <p>Unlike {@code FrameTableView} (a fixed-size panel embedded in a schematic), this component is
+ * meant to live inside a resizable window: the number of visible rows is recomputed from its own
+ * live height whenever it changes, never below {@link #MIN_VISIBLE_ROWS}. The caller is expected
+ * to floor the containing window's own resizable minimum at {@link #minimumWidth()} /
+ * {@link #minimumHeight()} (plus whatever chrome it adds around this component) so that floor is
+ * never actually reached by a user trying to see more rows -- only ever by the window's fixed,
+ * enforced minimum size.
+ */
+public class WindowedTableView<R> extends VBox
+{
+    public static final double ROW_HEIGHT = 24;
+    public static final int MIN_VISIBLE_ROWS = 3;
+
+    private static final double BAR_WIDTH = 12;
+    private static final double SEEK_BAR_HEIGHT = 30;
+    private static final int WHEEL_STEP = 3;
+
+    private final List<WindowedTableColumn<R>> columns;
+    private final VBox rowsBox = new VBox();
+    private final List<RowNode> pool = new ArrayList<>();
+    private final ScrollBar scrollBar = new ScrollBar();
+    private final TextField seekField = new TextField();
+    private final Label seekStatus = new Label();
+    private final HBox header = new HBox();
+
+    private final LongProperty windowStart = new SimpleLongProperty(0);
+    private WindowedRowSource<R> rowSource = emptySource();
+    private final Function<R, Boolean> rowLockedFn;
+
+    private int rowsShown = MIN_VISIBLE_ROWS;
+    private boolean syncingScrollBar = false;
+
+    /** @param entryNoun singular name of one row, e.g. "page" -- used in the seek field's prompt/errors. */
+    public WindowedTableView(List<WindowedTableColumn<R>> columns, String entryNoun)
+    {
+        this(columns, entryNoun, null);
+    }
+
+    /**
+     * @param entryNoun singular name of one row, e.g. "page" -- used in the seek field's prompt/errors.
+     * @param rowLockedFn optional per-row predicate (e.g. "is this address kernel-locked") that
+     *                     toggles a {@code page-table-row-locked} style class on the row, in the
+     *                     same column-agnostic spirit as {@link WindowedTableColumn}; null if the
+     *                     table has no such notion.
+     */
+    public WindowedTableView(List<WindowedTableColumn<R>> columns, String entryNoun, Function<R, Boolean> rowLockedFn)
+    {
+        this.columns = columns;
+        this.rowLockedFn = rowLockedFn;
+        getStyleClass().add("page-table-view");
+        setFocusTraversable(true);
+
+        getChildren().addAll(buildSeekBar(entryNoun), buildHeader(), buildBody());
+        ensurePool(MIN_VISIBLE_ROWS);
+        setMinWidth(minimumWidth());
+        setMinHeight(minimumHeight());
+
+        heightProperty().addListener((o, ov, nv) -> Platform.runLater(this::onResize));
+        Platform.runLater(this::onResize);
+    }
+
+    /** Swaps the data source (e.g. a different user's page table), resetting the scroll position. */
+    public void setRowSource(WindowedRowSource<R> source)
+    {
+        this.rowSource = source != null ? source : emptySource();
+        windowStart.set(0);
+        render();
+    }
+
+    /** Re-pulls the currently visible window's data without moving it (e.g. after a sim step). */
+    public void refresh()
+    {
+        render();
+    }
+
+    public LongProperty windowStartProperty() { return windowStart; }
+
+    /** Scrolls so entry {@code index} sits in the middle of the visible window -- e.g. opening the
+     *  popup pre-seeked to whatever address a caller already knows, the same computation {@link
+     *  #seek()} performs internally after validating typed-in input. */
+    public void centerOn(long index)
+    {
+        setWindowStart(index - rowsShown / 2);
+    }
+
+    /** The narrowest this component can usefully be: every column's own width, plus the scrollbar. */
+    public double minimumWidth()
+    {
+        double contentWidth = columns.stream().mapToDouble(WindowedTableColumn::width).sum();
+        return contentWidth + BAR_WIDTH + 24; // + this component's own .page-table-view padding
+    }
+
+    /** The shortest this component can usefully be: seek bar + header + MIN_VISIBLE_ROWS rows. */
+    public double minimumHeight()
+    {
+        return SEEK_BAR_HEIGHT + ROW_HEIGHT + MIN_VISIBLE_ROWS * ROW_HEIGHT + 24;
+    }
+
+    private void setWindowStart(long start)
+    {
+        long max = Math.max(0, rowSource.getEntryCount() - rowsShown);
+        windowStart.set(Math.max(0, Math.min(start, max)));
+        render();
+    }
+
+    private HBox buildSeekBar(String entryNoun)
+    {
+        Label label = new Label("Go to " + entryNoun);
+        label.getStyleClass().add("page-table-cell");
+        seekField.getStyleClass().add("os-frame-seek");
+        seekField.setPromptText("0x… or decimal");
+        seekField.setPrefColumnCount(9);
+        seekField.setOnAction(e -> seek());
+        seekField.textProperty().addListener((o, ov, nv) -> {
+            seekField.getStyleClass().remove("os-frame-seek-error");
+            seekStatus.setText("");
+        });
+        seekStatus.getStyleClass().add("os-disk-summary");
+
+        HBox bar = new HBox(8, label, seekField, seekStatus);
+        bar.getStyleClass().add("os-frame-seek-bar");
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setMinHeight(SEEK_BAR_HEIGHT);
+        bar.setPrefHeight(SEEK_BAR_HEIGHT);
+        return bar;
+    }
+
+    private HBox buildHeader()
+    {
+        header.getStyleClass().add("frame-table-header");
+        header.setPrefHeight(ROW_HEIGHT);
+        // Reserve the scrollbar's width unconditionally (not just while it's actually visible) so
+        // the header never visibly shifts as the row count/entry count changes.
+        header.setPadding(new Insets(0, BAR_WIDTH, 0, 0));
+        for (WindowedTableColumn<R> column : columns)
+            header.getChildren().add(headerCell(column.header(), column.width()));
+        return header;
+    }
+
+    private HBox buildBody()
+    {
+        HBox.setHgrow(rowsBox, Priority.ALWAYS);
+
+        scrollBar.getStyleClass().add("slim-scroll");
+        scrollBar.setOrientation(Orientation.VERTICAL);
+        scrollBar.setPrefWidth(BAR_WIDTH);
+        scrollBar.setMinWidth(BAR_WIDTH);
+        scrollBar.prefHeightProperty().bind(rowsBox.heightProperty());
+        scrollBar.valueProperty().addListener((o, ov, nv) -> {
+            if (!syncingScrollBar)
+                setWindowStart(AddressScaleScrollBar.toWindowStart(scrollBar, rowSource.getEntryCount(), rowsShown));
+        });
+
+        HBox body = new HBox(rowsBox, scrollBar);
+        VBox.setVgrow(body, Priority.ALWAYS);
+
+        body.addEventHandler(ScrollEvent.SCROLL, e -> {
+            if (rowSource.getEntryCount() <= rowsShown)
+                return;
+            long step = e.getDeltaY() > 0 ? -WHEEL_STEP : WHEEL_STEP;
+            setWindowStart(windowStart.get() + step);
+            e.consume();
+        });
+        return body;
+    }
+
+    // Recomputes how many rows fit in the space actually granted to this component (driven, via
+    // VBox/HBox grow priorities up the parent chain, by the containing window's own resize),
+    // rebuilds the row pool to match, and re-clamps the window.
+    private void onResize()
+    {
+        double available = getHeight() - SEEK_BAR_HEIGHT - ROW_HEIGHT;
+        int rows = (int) Math.max(MIN_VISIBLE_ROWS, Math.floor(available / ROW_HEIGHT));
+        if (rows == rowsShown)
+            return;
+        rowsShown = rows;
+        ensurePool(rows);
+        setWindowStart(windowStart.get());
+    }
+
+    private void ensurePool(int rows)
+    {
+        while (pool.size() < rows)
+        {
+            RowNode r = new RowNode();
+            pool.add(r);
+            rowsBox.getChildren().add(r.box);
+        }
+        for (int i = 0; i < pool.size(); i++)
+        {
+            boolean shown = i < rows;
+            pool.get(i).box.setVisible(shown);
+            pool.get(i).box.setManaged(shown);
+        }
+    }
+
+    private void seek()
+    {
+        String text = seekField.getText().trim();
+        if (text.isEmpty())
+            return;
+
+        long entryCount = rowSource.getEntryCount();
+        long target;
+        try
+        {
+            target = text.toLowerCase().startsWith("0x")
+                    ? Long.parseLong(text.substring(2), 16)
+                    : Long.parseLong(text);
+        }
+        catch (NumberFormatException ex)
+        {
+            flagSeekError("not a number");
+            return;
+        }
+        if (target < 0 || target >= entryCount)
+        {
+            flagSeekError("out of range (0 .. " + (entryCount - 1) + ")");
+            return;
+        }
+        seekField.getStyleClass().remove("os-frame-seek-error");
+        seekStatus.setText("");
+        setWindowStart(target - rowsShown / 2);
+    }
+
+    private void flagSeekError(String message)
+    {
+        if (!seekField.getStyleClass().contains("os-frame-seek-error"))
+            seekField.getStyleClass().add("os-frame-seek-error");
+        seekStatus.setText(message);
+    }
+
+    private void render()
+    {
+        long entryCount = rowSource.getEntryCount();
+        long start = windowStart.get();
+        boolean scrolls = entryCount > rowsShown;
+
+        scrollBar.setManaged(scrolls);
+        scrollBar.setVisible(scrolls);
+        AddressScaleScrollBar.configure(scrollBar, entryCount, rowsShown);
+
+        syncingScrollBar = true;
+        AddressScaleScrollBar.syncValue(scrollBar, start, entryCount, rowsShown);
+        syncingScrollBar = false;
+
+        for (int i = 0; i < pool.size(); i++)
+        {
+            if (i >= rowsShown)
+                continue; // already hidden by ensurePool
+            RowNode r = pool.get(i);
+            long index = start + i;
+            if (index >= entryCount)
+                r.hide();
+            else
+                r.update(rowSource.rowAt(index));
+        }
+    }
+
+    private Label headerCell(String text, double width)
+    {
+        Label label = new Label(text);
+        label.getStyleClass().add("page-table-cell");
+        label.setPrefWidth(width);
+        label.setAlignment(Pos.CENTER);
+        return label;
+    }
+
+    private static <R> WindowedRowSource<R> emptySource()
+    {
+        return new WindowedRowSource<>()
+        {
+            @Override public long getEntryCount() { return 0; }
+            @Override public R rowAt(long index) { throw new IndexOutOfBoundsException(Long.toString(index)); }
+        };
+    }
+
+    /** One pooled row: one Label per column, mutated in place as the window moves. */
+    private final class RowNode
+    {
+        final HBox box = new HBox();
+        final List<Label> cells = new ArrayList<>();
+
+        RowNode()
+        {
+            box.getStyleClass().add("page-table-row");
+            box.setAlignment(Pos.CENTER_LEFT);
+            box.setMinHeight(ROW_HEIGHT);
+            box.setPrefHeight(ROW_HEIGHT);
+            box.setMaxHeight(ROW_HEIGHT);
+            for (WindowedTableColumn<R> column : columns)
+            {
+                Label cell = new Label();
+                cell.getStyleClass().add("page-table-cell");
+                cell.setPrefWidth(column.width());
+                cell.setAlignment(Pos.CENTER);
+                cells.add(cell);
+                box.getChildren().add(cell);
+            }
+        }
+
+        void update(R row)
+        {
+            box.setVisible(true);
+            box.setManaged(true);
+            for (int i = 0; i < columns.size(); i++)
+                cells.get(i).setText(columns.get(i).textFn().apply(row));
+
+            boolean locked = rowLockedFn != null && rowLockedFn.apply(row);
+            if (locked && !box.getStyleClass().contains("page-table-row-locked"))
+                box.getStyleClass().add("page-table-row-locked");
+            else if (!locked)
+                box.getStyleClass().remove("page-table-row-locked");
+        }
+
+        void hide()
+        {
+            box.setVisible(false);
+            box.setManaged(false);
+            box.getStyleClass().remove("page-table-row-locked");
+        }
+    }
+}

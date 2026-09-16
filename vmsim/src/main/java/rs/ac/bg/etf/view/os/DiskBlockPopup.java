@@ -53,7 +53,7 @@ public class DiskBlockPopup
     {
         TableView<DiskWord> table = new TableView<>(viewModel.getDiskBlockWords());
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setPlaceholder(new Label("no data in this block"));
+        table.setPlaceholder(new Label("no non-zero data present"));
 
         int offsetDigits = ValueConverter.hexDigitsFor(Math.max(1, viewModel.getWordBits()));
         TableColumn<DiskWord, String> offsetCol = new TableColumn<>("Offset");

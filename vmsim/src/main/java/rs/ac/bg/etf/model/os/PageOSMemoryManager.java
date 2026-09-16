@@ -1,9 +1,11 @@
 package rs.ac.bg.etf.model.os;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
@@ -11,29 +13,39 @@ public class PageOSMemoryManager extends OSMemoryManager
 {
     public static record FrameMapping(int user, long page, PageTableDescriptor descriptor){}
 
-    private HashMap<Long, FrameMapping> allocatedFrames = new HashMap<>();
+    // Sorted (not a HashMap) so getFreeFrame()/allocateAndLock() can walk occupied frames in
+    // ascending order to find gaps, rather than scanning every one of the (up to 2^24) frames.
+    private TreeMap<Long, FrameMapping> allocatedFrames = new TreeMap<>();
     private HashSet<Long> lockedFrames = new HashSet<>();
     private long maxFrames;
 
     public PageOSMemoryManager(EvictionPolicy evictionPolicy, int numberOfUsers, long physicalAddressBits, long wordBits) {
         super(evictionPolicy, numberOfUsers);
-        this.maxFrames = 1 << (physicalAddressBits - wordBits);
+        // 1L (not 1): an int shift is masked mod 32, so >= 31 frame bits would overflow / go negative.
+        this.maxFrames = 1L << (physicalAddressBits - wordBits);
     }
 
     public void init(Map<PageTableDescriptor, Integer> descriptors)
     {
         allocatedFrames.clear();
         lockedFrames.clear();
-        
-        for (PageTableDescriptor descriptor: descriptors.keySet())
+
+        // Log allocations in a deterministic (ascending frame number) order so the
+        // initial FIFO eviction order is well defined, rather than whatever order
+        // the HashMap happens to iterate in.
+        ArrayList<PageTableDescriptor> orderedDescriptors = new ArrayList<>(descriptors.keySet());
+        orderedDescriptors.sort(Comparator.comparingLong(PageTableDescriptor::getBlock));
+
+        for (PageTableDescriptor descriptor: orderedDescriptors)
         {
             int user = descriptors.get(descriptor);
 
             allocatedFrames.put(descriptor.getBlock(), new FrameMapping(user, descriptor.getPage(), descriptor));
+            evictionPolicy.logAllocation(descriptor.getBlock());
         }
     }
 
-    public long getFreeFrame() 
+    public long getFreeFrame()
     {
         if (lockedFrames.size() == maxFrames)
             throw new RuntimeException("All frames locked by kernel");
@@ -41,18 +53,18 @@ public class PageOSMemoryManager extends OSMemoryManager
         if (allocatedFrames.size() == maxFrames)
             return -1;
 
-       long frame = -1;
-
-        for (long i = 0; i < maxFrames; i++)
+        // Walk occupied frames in ascending order and return the first gap, rather than testing
+        // every one of the (up to 2^24) frame indices individually.
+        long expected = 0;
+        for (long occupied : allocatedFrames.keySet())
         {
-            if (!allocatedFrames.containsKey(i))
-            {
-                frame = i;
+            if (occupied > expected)
                 break;
-            }
+
+            expected = occupied + 1;
         }
 
-        return frame;
+        return expected < maxFrames ? expected : -1;
     }
 
     public void allocate(long frame, int user, long page, PageTableDescriptor descriptor)
@@ -103,35 +115,31 @@ public class PageOSMemoryManager extends OSMemoryManager
     {
         if (allocatedFrames.size() == maxFrames)
             throw new RuntimeException("More frames needed to allocate kernel structures");
-        
-        for (long i = 0; i < maxFrames - frames; i++)
+
+        // Walk occupied frames in ascending order, looking for the first gap (before, between, or
+        // after them) at least `frames` wide, instead of probing every one of the (up to 2^24)
+        // candidate starting frames individually.
+        long candidateStart = 0;
+        for (long occupied : allocatedFrames.keySet())
         {
-            boolean found = true;
+            if (occupied - candidateStart >= frames)
+                break;
 
-            for (long j = 0; j < frames; j++) 
-            {
-                if (allocatedFrames.containsKey(i + j)) 
-                {
-                    found = false;
-                    i = i + j; 
-                    break;
-                }
-            }
-
-            if (found)
-            {
-                for (long j = 0; j < frames; j++) 
-                {
-                    long currentFrame = i + j;
-                    allocatedFrames.put(currentFrame, null);
-                    lockedFrames.add(currentFrame);
-                }
-
-                
-                return i; 
-            }
+            candidateStart = occupied + 1;
         }
 
-        throw new RuntimeException("External Fragmentation Error: Not enough consecutive free frames available to allocate kernel structures.");
+        if (candidateStart + frames > maxFrames)
+        {
+            throw new RuntimeException("External Fragmentation Error: Not enough consecutive free frames available to allocate kernel structures.");
+        }
+
+        for (long j = 0; j < frames; j++)
+        {
+            long currentFrame = candidateStart + j;
+            allocatedFrames.put(currentFrame, null);
+            lockedFrames.add(currentFrame);
+        }
+
+        return candidateStart;
     }
 }

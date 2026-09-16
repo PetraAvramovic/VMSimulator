@@ -5,6 +5,83 @@
 }
 
 /* =========================================================================
+   SHARED MINIMAL SCROLLBAR
+   A slim, understated scrollbar -- the default Modena one is a wide, boxy
+   control with track fill and increment/decrement arrow buttons that clashes
+   with the app's flat, minimal look. No track fill, no arrow buttons, just a
+   thin rounded thumb that darkens slightly on hover/drag.
+
+   Every scrollable view in the app should reuse this one class rather than
+   hand-rolling its own scrollbar CSS:
+   - ScrollPane / ListView / TableView etc.: add the "slim-scroll" style
+     class to the container itself (its skin's internal scrollbars pick up
+     the descendant-selector rules below).
+   - A standalone ScrollBar control not wrapped by a ScrollPane (e.g.
+     FrameTableView's windowed-table scrollbar): add "slim-scroll" directly
+     to the ScrollBar node (it already carries "scroll-bar", so the compound
+     selector below matches it directly).
+   ========================================================================= */
+.slim-scroll .scroll-bar:vertical,
+.slim-scroll .scroll-bar:horizontal,
+.scroll-bar.slim-scroll:vertical,
+.scroll-bar.slim-scroll:horizontal {
+    -fx-background-color: transparent;
+}
+
+.slim-scroll .scroll-bar:vertical,
+.scroll-bar.slim-scroll:vertical {
+    -fx-padding: 2px 1px 2px 0;
+    -fx-pref-width: 8px;
+}
+
+.slim-scroll .scroll-bar:horizontal,
+.scroll-bar.slim-scroll:horizontal {
+    -fx-padding: 0 2px 1px 2px;
+    -fx-pref-height: 8px;
+}
+
+.slim-scroll .scroll-bar .track,
+.slim-scroll .scroll-bar .track-background,
+.scroll-bar.slim-scroll .track,
+.scroll-bar.slim-scroll .track-background {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.slim-scroll .scroll-bar .thumb,
+.scroll-bar.slim-scroll .thumb {
+    -fx-background-color: #dcdde1;
+    -fx-background-radius: 4px;
+    -fx-background-insets: 0;
+}
+
+.slim-scroll .scroll-bar .thumb:hover,
+.slim-scroll .scroll-bar .thumb:pressed,
+.scroll-bar.slim-scroll .thumb:hover,
+.scroll-bar.slim-scroll .thumb:pressed {
+    -fx-background-color: #b5b8c0;
+}
+
+.slim-scroll .scroll-bar .increment-button,
+.slim-scroll .scroll-bar .decrement-button,
+.scroll-bar.slim-scroll .increment-button,
+.scroll-bar.slim-scroll .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-pref-height: 0;
+    -fx-pref-width: 0;
+}
+
+.slim-scroll .scroll-bar .increment-arrow,
+.slim-scroll .scroll-bar .decrement-arrow,
+.scroll-bar.slim-scroll .increment-arrow,
+.scroll-bar.slim-scroll .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-shape: none;
+}
+
+/* =========================================================================
    MAIN MENU CONTAINERS & TYPOGRAPHY
    ========================================================================= */
 .main-menu-container {
@@ -82,6 +159,19 @@
     -fx-padding: 5px 0 5px 0;   /* Vertical padding spacing cushion */
 }
 
+
+/* Configuration screen: the form content scrolls (rather than being clipped by the window) when
+   the stage is shorter/narrower than the form's natural size, e.g. once the validation error
+   banner below wraps to extra lines. Transparent chrome so it reads as part of the flat page,
+   not a boxed-in widget; scrollbar styling itself comes from the shared "slim-scroll" class. */
+.config-scroll,
+.config-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.config-root {
+    -fx-background-color: #f8f9fa;
+}
 
 /* Base grid layout matrices spacing parameters */
 .form-grid-base {
@@ -169,7 +259,8 @@
 }
 
 /* Small circular back button floating in the workbench's top-left corner. Overrides the
-   wide default .button geometry to a fixed round icon. */
+   wide default .button geometry to a fixed round icon. The chevron itself is a shape node
+   (see BackButton.create), not a text glyph, so it centres exactly regardless of font metrics. */
 .back-button {
     -fx-min-width: 32px;
     -fx-pref-width: 32px;
@@ -178,9 +269,14 @@
     -fx-pref-height: 32px;
     -fx-max-height: 32px;
     -fx-padding: 0;
-    -fx-font-size: 16px;
     -fx-background-radius: 16px;
     -fx-border-radius: 16px;
+}
+
+.back-button-icon {
+    -fx-stroke: #2c3e50;
+    -fx-stroke-width: 2px;
+    -fx-fill: transparent;
 }
 
 .sidebar-panel {
@@ -196,21 +292,126 @@
     -fx-text-fill: #7f8c8d;
 }
 
-/* Left-sidebar instruction list: monospaced rows so the access-type / user / address columns line up. */
-.instruction-list .list-cell {
-    -fx-font-family: "monospace";
-    -fx-padding: 4px 8px;
+/* Left-sidebar instruction list: card-style container matching the app's other flat white panels.
+   A fixed header (Index/Op/User/VA) sits above a plain ScrollPane (not ListView) around a VBox of
+   row HBoxes -- see SimulationView.buildInstructionList -- so its width is driven by the real
+   content, not a guessed pixel constant. This outer card carries the border/background/radius;
+   the header and scroll area below are both transparent so it shows through cleanly. */
+.instruction-list {
+    -fx-background-color: #ffffff;
+    -fx-background-insets: 0;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 4px;
 }
 
-/* The instruction currently being executed -> blue, matching the page table's current-row accent. */
-.instruction-list .list-cell:current {
-    -fx-background-color: #eaf4fc;
-    -fx-border-color: #3498db;
+/* Column headers. The trailing spacer that keeps these lined up with the scrollable rows below
+   (which give up that same width to their scrollbar) is a plain Region in SimulationView, sized
+   to this machine's real scrollbar width -- not a guessed pixel constant here either. */
+.instruction-list-header {
+    -fx-border-color: transparent transparent #dcdde1 transparent;
     -fx-border-width: 1px;
-    -fx-background-radius: 4px;
-    -fx-border-radius: 4px;
+    -fx-padding: 2px 8px 6px 0;
+}
+
+.instruction-list-header .page-table-cell {
+    -fx-font-weight: bold;
+    -fx-text-fill: #7f8c8d;
+    -fx-font-size: 12px;
+}
+
+.instruction-list-scroll {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+}
+
+.instruction-list-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* Breathing room between the row text and the scrollbar sitting right next to it. Padding on the
+   scrolled content itself (not the scrollbar or the ScrollPane) -- it's what determines where the
+   viewport's right edge (and so the scrollbar immediately after it) actually falls, and it's
+   already counted in SimulationView's real-content width measurement, so the sidebar sizes
+   itself to include this gap automatically. */
+.instruction-list-rows {
+    -fx-padding: 0 8px 0 0;
+}
+
+/* Scrollbar styling for this ScrollPane comes from the shared "slim-scroll" class (added in
+   SimulationView alongside "instruction-list-scroll") -- see the .slim-scroll rules near the top
+   of this file. */
+
+/* One row: four .page-table-cell columns (Index/Op/User/VA) in an HBox -- hover/current-row
+   accent lives on the row container now that a row is several cells, not one big label. Only
+   vertical padding: a horizontal inset here (and not matched on the header's own cells) would
+   leave the header a few pixels narrower than the scrollable rows beneath it, since the header
+   has no per-row equivalent to compensate -- any left/right breathing room instead comes from
+   the card's own uniform padding, shared by the header and the rows alike. */
+.instruction-list-row {
+    -fx-padding: 6px 0;
+    -fx-background-color: transparent;
+    -fx-background-radius: 6px;
+}
+
+.instruction-list-row:hover {
+    -fx-background-color: #f1f2f6;
+    -fx-cursor: hand;
+}
+
+/* The instruction currently being executed -> blue accent bar, matching the page table's current-row
+   accent. A border is painted inset (it doesn't add to the row's own layout width the way a
+   mismatched padding override would), so no compensating padding is needed here. */
+.instruction-list-row:current {
+    -fx-background-color: #eaf4fc;
+    -fx-background-radius: 6px;
+    -fx-border-color: #3498db;
+    -fx-border-width: 0 0 0 3px;
     -fx-font-weight: bold;
 }
+
+/* Right-sidebar execution log: the same card/scrollbar/row treatment as the Instructions list,
+   just without a header (log lines aren't columnar) or a "current" accent (there's no equivalent
+   of "the current instruction" for a past log entry). Still a real ListView (unlike Instructions,
+   it has no header row to keep aligned and no scroll-to-current logic to replace ListView's own
+   scrollTo() for), so the rules below target its built-in .list-cell rather than a plain Label. */
+.execution-log {
+    -fx-background-color: #ffffff;
+    -fx-background-insets: 0;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 4px;
+}
+
+/* Plain (not monospace) text -- these are prose descriptions, not columnar data like the
+   Instructions/Frame/Page tables, so there's nothing for a fixed-width font to keep aligned;
+   inherits the app's normal "Segoe UI" from .root. A subtle bottom border separates rows,
+   matching .frame-table-row/.page-table-row's own unintrusive divider. */
+.execution-log .list-cell {
+    -fx-font-size: 13px;
+    -fx-text-fill: #2c3e50;
+    -fx-padding: 6px 8px;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #f1f2f6 transparent;
+    -fx-border-width: 1px;
+}
+
+/* :filled guards against highlighting empty trailing rows -- unlike the Instructions list's
+   plain Labels, a ListView's cells are recycled and can be empty when the log is shorter than
+   the viewport. */
+.execution-log .list-cell:filled:hover {
+    -fx-background-color: #f1f2f6;
+    -fx-cursor: hand;
+}
+
+/* Scrollbar styling (vertical and, since log lines can overflow the sidebar's width, horizontal
+   too) comes from the shared "slim-scroll" class (added in SimulationView alongside
+   "execution-log") -- see the .slim-scroll rules near the top of this file. */
 
 .tab-placeholder-label {
     -fx-font-size: 13px;
@@ -287,6 +488,31 @@
     -fx-background-radius: 5px;
 }
 
+/* The MMU schematic's small page-table preview opens the full-table inspector window on click; a
+   light border tint on hover signals that, without touching the base .page-table-view styling
+   also reused by the (non-clickable) inspector window's own table. */
+.page-table-clickable:hover {
+    -fx-border-color: #3498db;
+}
+
+/* The TLB schematic's body (AssociativeTLBView/DirectTLBView/SetAssociativeTLBView) opens its own
+   full-TLB inspector window the same way, but -- unlike .page-table-clickable, layered on
+   .page-table-view which already reserves a 1px border -- its root carries no border of its own.
+   The border width must stay reserved (transparent) in both states, or adding it only on :hover
+   would grow the node and visibly shift its content. */
+.tlb-clickable {
+    -fx-border-width: 1px;
+    -fx-border-color: transparent;
+}
+.tlb-clickable:hover {
+    -fx-border-color: #3498db;
+}
+
+/* Root of PageTableInspectorWindow -- the app's standard off-white tab background. */
+.page-table-inspector {
+    -fx-background-color: #f8f9fa;
+}
+
 .page-table-header .page-table-cell {
     -fx-font-weight: bold;
     -fx-text-fill: #7f8c8d;
@@ -307,12 +533,16 @@
     -fx-border-radius: 4px;
 }
 
+/* A row addressing memory pinned by the kernel (page-table storage) -- same grey as
+   .os-frame-kernel's swatch, for cross-tab consistency. */
+.page-table-row-locked {
+    -fx-background-color: #c9ccd1;
+}
+
 .page-table-cell {
     -fx-font-family: "Consolas", "Monospaced";
     -fx-font-size: 13px;
     -fx-text-fill: #2c3e50;
-xt-fill: #9aa1a7;
-    -fx-font-weight: bold;
 }
 
 .connector-line {
@@ -384,6 +614,18 @@ xt-fill: #9aa1a7;
    miss (and through the refill); neutral .mmu-bit-value default before the lookup resolves. */
 .tlb-tag-hit { -fx-text-fill: #27ae60; }
 .tlb-tag-miss { -fx-text-fill: #e74c3c; }
+
+/* "Tag" caption on the split's tag leg -- larger and darker than the grey bit-width/value labels
+   so it doesn't blend into the (similarly grey) inactive wire; blue to match once the wire lights. */
+.tlb-tag-caption {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+}
+
+.tlb-tag-caption:active {
+    -fx-text-fill: #3498db;
+}
 
 /* Heading above each schematic block (VA / PA / Process / page table / TLB) on the MMU and TLB tabs. */
 .mmu-section-label {
@@ -458,44 +700,63 @@ xt-fill: #9aa1a7;
     -fx-font-size: 12px;
 }
 
-/* Virtualised, scrollable frame list -- strip the ListView chrome so rows sit on the panel. */
-.frame-table-list {
-    -fx-background-color: transparent;
-    -fx-background-insets: 0;
-    -fx-padding: 0;
+/* Seek-a-frame bar above the header. */
+.os-frame-seek-bar {
+    -fx-padding: 0 0 6px 0;
 }
 
-.frame-table-list .list-cell {
-    -fx-background-color: transparent;
-    -fx-padding: 0;
+.os-frame-seek {
+    -fx-font-family: "Consolas", "Monospaced", monospace;
+    -fx-font-size: 12px;
+    -fx-pref-height: 22px;
+}
+
+.os-frame-seek-error {
+    -fx-border-color: #e74c3c;
+    -fx-border-width: 1.5px;
+}
+
+/* One frame row (an HBox in the windowed table). */
+.frame-table-row {
     -fx-border-color: transparent transparent #f1f2f6 transparent;
     -fx-border-width: 1px;
 }
 
-.frame-table-list .list-cell:filled:hover,
-.frame-table-list .list-cell:filled:selected {
-    -fx-background-color: transparent;
-}
+/* Highlighted rows are a flat background wash -- no border, so it reads cleanly across the
+   coloured state swatch on the left (the swatch keeps its own colour on top). */
 
 /* Frame the current OS sub-flow is loading into -> blue, matching the page table's current row. */
-.frame-table-list .list-cell.frame-table-row-active {
-    -fx-background-color: #eaf4fc;
-    -fx-border-color: #3498db;
+.frame-table-row.frame-table-row-active {
+    -fx-background-color: #d7ebfa;
 }
 
-/* The frame that would be evicted next once memory is full -> amber. */
-.frame-table-list .list-cell.os-row-victim {
-    -fx-background-color: #fdf3e0;
-    -fx-border-color: #e0a63b;
+/* The frame a fault is about to evict -> amber (frame table only, on the imminent step). */
+.frame-table-row.os-row-victim {
+    -fx-background-color: #fbeccb;
 }
 
 /* The frame being evicted right now -> red. */
-.frame-table-list .list-cell.os-row-evicting {
-    -fx-background-color: #fdecea;
-    -fx-border-color: #e74c3c;
+.frame-table-row.os-row-evicting {
+    -fx-background-color: #fbdbd6;
 }
 
-/* Leading swatch on each row -- doubles as the occupancy strip; carries the next-victim marker. */
+/* The row a "Seek frame" search just landed on is accented with a pulsing glow, applied directly
+   as an InnerShadow effect in FrameTableView (not a style class here). A border would be painted
+   as part of the row's own background layer, which the opaque, flush-left swatch label would
+   then cover on that side; InnerShadow (rather than DropShadow) is self-contained within the
+   row's own bounds, so it also can't be clipped or covered by the neighboring rows the table
+   packs edge to edge. */
+
+/* Permanently opaque layer (matching .frame-table-view's own white) that the glow effect above
+   actually applies to: a row with no state wash is otherwise fully transparent except for its
+   text glyphs, and an effect is computed from the node's rendered alpha, not its geometric
+   bounds -- without this, the glow would silhouette each label separately instead of forming one
+   rectangle around the whole row. */
+.frame-table-row-glow-backer {
+    -fx-background-color: #ffffff;
+}
+
+/* Leading swatch on each row -- the per-frame occupancy strip; carries the next-victim marker. */
 .os-frame-swatch {
     -fx-border-color: #ffffff;
     -fx-border-width: 0 1px 0 0;
@@ -505,12 +766,14 @@ xt-fill: #9aa1a7;
 }
 
 .os-frame-free      { -fx-background-color: #eef0f2; }
-.os-frame-allocated { -fx-background-color: #d6e9fb; }
+.os-frame-allocated { -fx-background-color: #4aa3df; }
 .os-frame-kernel    { -fx-background-color: #c9ccd1; }
 .os-frame-victim    { -fx-background-color: #f5d9a8; }
 .os-frame-evicting  { -fx-background-color: #f5b7b1; }
 
-/* Disk box: same white/blue framed card as the MMU tab's standalone value boxes. */
+/* Disk box: same white/blue framed card as the MMU tab's standalone value boxes. The
+   cursor is already set to HAND in code; :hover below is the only "this is clickable" cue --
+   there is no permanent hint label competing with the disk-block summary for attention. */
 .os-disk-box {
     -fx-padding: 10px 14px 10px 14px;
     -fx-background-color: #ffffff;
@@ -518,6 +781,21 @@ xt-fill: #9aa1a7;
     -fx-border-width: 2px;
     -fx-border-radius: 6px;
     -fx-background-radius: 6px;
+}
+
+.os-disk-box:hover {
+    -fx-background-color: #f4faff;
+    -fx-border-color: #2980b9;
+    -fx-effect: dropshadow(three-pass-box, rgba(52,152,219,0.28), 8, 0.0, 0, 2);
+}
+
+/* A few short "platters" stacked behind the disk box's address readout -- a classic disk-drum
+   motif. Rounded to a full pill via arcWidth/arcHeight in code; the gradient stands in for a
+   cylindrical highlight. */
+.os-disk-platter {
+    -fx-fill: linear-gradient(to bottom, #eaf4fc 0%, #cfe8fb 55%, #9ecdf2 100%);
+    -fx-stroke: #3498db;
+    -fx-stroke-width: 1.5px;
 }
 
 .os-disk-summary {
@@ -571,15 +849,19 @@ xt-fill: #9aa1a7;
 
 .os-user-summary {
     -fx-spacing: 6px;
-    -fx-padding: 4px 0 4px 0;
-}
-
-.os-user-summary-scroll {
-    -fx-background-color: transparent;
-    -fx-background: transparent;
+    -fx-padding: 10px 12px 10px 12px;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #dcdde1;
+    -fx-border-width: 1px;
+    -fx-border-radius: 5px;
+    -fx-background-radius: 5px;
 }
 
 .os-user-summary-row {
+    -fx-spacing: 12px;
+}
+
+.os-user-summary-cell {
     -fx-font-family: "Consolas", "Monospaced", monospace;
     -fx-font-size: 12px;
     -fx-text-fill: #2c3e50;

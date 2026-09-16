@@ -1,6 +1,7 @@
 package rs.ac.bg.etf.view;
 
 import javafx.beans.property.ObjectProperty;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
@@ -10,6 +11,7 @@ import javafx.stage.FileChooser;
 import java.io.File;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TLBType;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TranslationType;
+import rs.ac.bg.etf.view.util.BackButton;
 import rs.ac.bg.etf.viewmodel.ConfigurationViewModel;
 
 /**
@@ -17,7 +19,12 @@ import rs.ac.bg.etf.viewmodel.ConfigurationViewModel;
  * Renders declarative layout blocks and maps numeric inputs type-safely.
  */
 public class ConfigurationView {
+    // Distance the floating back button sits from the top-left corner, matching the padding
+    // SimulationView's sidebar already wraps its own back button in.
+    private static final Insets BACK_BUTTON_MARGIN = new Insets(15);
+
     private final VBox layoutContainer;
+    private final Parent rootContainer;
 
     // IntegerProperty.asObject() hands back a fresh wrapper each call, and bindBidirectional
     // only holds it weakly. Without a strong reference here the GC reclaims the wrapper and the
@@ -252,25 +259,13 @@ public class ConfigurationView {
         errorBanner.getStyleClass().add("error-banner-label");
 
         errorBanner.setWrapText(true);
-        errorBanner.setMaxWidth(800); // Allow it to expand wide across the screen
+        // Grow to whatever width the scroll pane's viewport actually gives it (instead of a fixed
+        // pixel cap) so the message re-wraps correctly at any window size rather than overflowing.
+        errorBanner.setMaxWidth(Double.MAX_VALUE);
         errorBanner.setMinHeight(Region.USE_PREF_SIZE); // FORCE it to take up its full text height
         errorBanner.setAlignment(Pos.CENTER);
-        
-        // 4. Force the parent layout VBox container to let this label fill the space horizontally
-        VBox.setVgrow(errorBanner, Priority.ALWAYS);
 
         errorBanner.textProperty().bind(viewModel.validationErrorMessageProperty());
-
-        StackPane errorWrapper = new StackPane(errorBanner);
-        errorWrapper.setAlignment(Pos.CENTER);
-        
-        // Tell the main VBox layout engine to ALWAYS prioritize allocating vertical space 
-        // to this error region over generic empty window gaps.
-        VBox.setVgrow(errorWrapper, Priority.ALWAYS);
-
-
-        Button backBtn = new Button("◀ Back");
-        backBtn.setOnAction(e -> viewModel.onConfigToMainMenu());
 
         Button launchBtn = new Button("Launch Engine ▶");
         launchBtn.getStyleClass().add("button-primary"); 
@@ -302,25 +297,49 @@ public class ConfigurationView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        actionRow.getChildren().addAll(loadConfigBtn, spacer, backBtn, launchBtn);
+        actionRow.getChildren().addAll(loadConfigBtn, spacer, launchBtn);
 
         // Pack the global segments vertically onto your main display viewport scene tree
         layoutContainer.getChildren().addAll(
-            headerLabel, 
-            subtitleLabel, 
-            columnsContainer, 
-            errorBanner, 
+            headerLabel,
+            subtitleLabel,
+            columnsContainer,
+            errorBanner,
             actionRow
         );
-        
+
         // Push intermediate vertical node adjustments spacing padding cushions
-        layoutContainer.setSpacing(25); 
+        layoutContainer.setSpacing(25);
+
+        // =========================================================================
+        // 4. SCROLLABLE VIEWPORT + FLOATING BACK BUTTON
+        // =========================================================================
+        // The form's natural height (columns + a validation error that can wrap to extra lines)
+        // can exceed a resized-down window; scrolling -- rather than letting the window silently
+        // clip the bottom of the content -- keeps the error message and action row reachable at
+        // any window size.
+        ScrollPane scrollPane = new ScrollPane(layoutContainer);
+        scrollPane.getStyleClass().addAll("config-scroll", "slim-scroll");
+        scrollPane.setFitToWidth(true);
+        scrollPane.setFocusTraversable(false);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+
+        // Same circular chevron back button as the simulation workbench, floating over the
+        // scrollable form instead of living inside the footer action row.
+        Button backButton = BackButton.create(viewModel::onConfigToMainMenu);
+
+        StackPane root = new StackPane(scrollPane, backButton);
+        StackPane.setAlignment(backButton, Pos.TOP_LEFT);
+        StackPane.setMargin(backButton, BACK_BUTTON_MARGIN);
+        root.getStyleClass().add("config-root");
+
+        this.rootContainer = root;
     }
 
     /**
      * Exposes the root container node so App.java can clip it to the viewport scene tree.
      */
     public Parent getRootContainerNode() {
-        return this.layoutContainer;
+        return this.rootContainer;
     }
 }

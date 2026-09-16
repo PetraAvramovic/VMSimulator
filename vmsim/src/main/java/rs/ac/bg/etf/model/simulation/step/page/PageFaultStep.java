@@ -3,6 +3,8 @@ package rs.ac.bg.etf.model.simulation.step.page;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
 public class PageFaultStep<T extends PageSimulationContext> extends SimulationStep<T>
@@ -36,11 +38,11 @@ public class PageFaultStep<T extends PageSimulationContext> extends SimulationSt
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
         return frame == -1
-                ? String.format("Page fault: page %d not valid, no free frames available.", descriptor.getPage())
-                : String.format("Page fault: page %d not valid, loading into free frame 0x%X.", descriptor.getPage(), frame);
+                ? new StepDescription(StepDescriptionKey.PAGE_FAULT_NO_FRAME, descriptor.getPage())
+                : new StepDescription(StepDescriptionKey.PAGE_FAULT_LOADING, descriptor.getPage(), frame);
     }
 
     

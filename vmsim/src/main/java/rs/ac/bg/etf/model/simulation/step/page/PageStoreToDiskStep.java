@@ -6,6 +6,8 @@ import rs.ac.bg.etf.model.disk.Disk;
 import rs.ac.bg.etf.model.memory.Memory;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
 public class PageStoreToDiskStep<T extends PageSimulationContext> extends SimulationStep<T> 
@@ -46,9 +48,9 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
-        return String.format("Wrote dirty page %d back to disk address 0x%X.", descriptor.getPage(), descriptor.getDisk());
+        return new StepDescription(StepDescriptionKey.PAGE_STORED_TO_DISK, descriptor.getPage(), descriptor.getDisk());
     }
 
     /** The frame being written back (and then reused for the incoming page); valid once {@link #execute()} has run. */

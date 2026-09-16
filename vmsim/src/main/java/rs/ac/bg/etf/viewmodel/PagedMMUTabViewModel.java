@@ -40,6 +40,9 @@ public class PagedMMUTabViewModel
         ZERO_FILL_TO_OFFSET,
         OFFSET_TO_ADDER,
         POINTER_TO_ADDER,
+        // Address bus driven into the page table once the descriptor address is formed -- lights up a
+        // step before ADDER_TO_ROW, which is the actual lookup resolving to a specific row.
+        ADDER_TO_TABLE,
         ADDER_TO_ROW,
         WORD_PASSTHROUGH,
         ROW_TO_BLOCK
@@ -49,6 +52,9 @@ public class PagedMMUTabViewModel
 
     private final PageSimulationContext context;
     private final Simulation simulation;
+    // Kept only so the full-table inspector window (opened from the view, not owned by this
+    // ViewModel) can listen for step changes on its own -- see currentStepNumberProperty().
+    private final IntegerProperty currentStepNumber;
 
     private final ObservableList<Row> visibleRows = FXCollections.observableArrayList();
     private final IntegerProperty blockHexDigits = new SimpleIntegerProperty(1);
@@ -80,6 +86,7 @@ public class PagedMMUTabViewModel
     {
         this.context = context;
         this.simulation = simulationViewModel.getSimulation();
+        this.currentStepNumber = simulationViewModel.currentStepNumberProperty();
 
         for (MmuLine line : MmuLine.values())
             lineActive.put(line, new SimpleBooleanProperty(false));
@@ -107,6 +114,12 @@ public class PagedMMUTabViewModel
     public int getPhysicalAddressBits() { return physicalAddressBits; }
     public int getFrameBits() { return frameBits; }
     public int getDiskBits() { return diskBits; }
+
+    /** The full simulation context -- e.g. for the full-table inspector window to read all users' page tables. */
+    public PageSimulationContext getContext() { return context; }
+
+    /** Ticks on every executed/undone step -- e.g. so the full-table inspector can refresh while open. */
+    public IntegerProperty currentStepNumberProperty() { return currentStepNumber; }
 
     public ObservableList<Row> getVisibleRows() 
     {
@@ -244,7 +257,7 @@ public class PagedMMUTabViewModel
     {
         if (step instanceof FormPageTableAddressStep)
             return EnumSet.of(MmuLine.PAGE_TO_OFFSET, MmuLine.ZERO_FILL_TO_OFFSET,
-                    MmuLine.OFFSET_TO_ADDER, MmuLine.POINTER_TO_ADDER);
+                    MmuLine.OFFSET_TO_ADDER, MmuLine.POINTER_TO_ADDER, MmuLine.ADDER_TO_TABLE);
         if (step instanceof PageTableLookupStep)
             return EnumSet.of(MmuLine.ADDER_TO_ROW);
         if (step instanceof FormPhysicalAddressFromPageTableStep)

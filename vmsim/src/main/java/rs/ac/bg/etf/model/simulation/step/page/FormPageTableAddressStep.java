@@ -2,6 +2,8 @@ package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 
 public class FormPageTableAddressStep<T extends PageSimulationContext> extends SimulationStep<T> 
 {
@@ -30,9 +32,9 @@ public class FormPageTableAddressStep<T extends PageSimulationContext> extends S
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
-        return String.format("Computed page table entry address: 0x%X (pointer 0x%X + offset 0x%X).",
+        return new StepDescription(StepDescriptionKey.PAGE_TABLE_ADDRESS_FORMED,
                 context.getCurrentDescriptorAddress(), context.getCurrentPTP(), context.getCurrentDescriptorOffset());
     }
 

@@ -2,6 +2,8 @@ package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 
 public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContext> extends SimulationStep<T>
@@ -37,9 +39,9 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
-        return String.format("Formed physical address 0x%X from page table (frame 0x%X).",
+        return new StepDescription(StepDescriptionKey.PHYSICAL_ADDRESS_FROM_PAGE_TABLE,
                 context.getCurrentPhysicalAddress(), descriptor.getBlock());
     }
     

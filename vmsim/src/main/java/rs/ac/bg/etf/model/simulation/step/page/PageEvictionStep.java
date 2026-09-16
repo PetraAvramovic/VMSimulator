@@ -5,6 +5,8 @@ import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager.FrameMapping;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
+import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 import rs.ac.bg.etf.model.tlb.TLB;
 import rs.ac.bg.etf.model.tlb.TLBEntry;
@@ -61,12 +63,14 @@ public class PageEvictionStep<T extends PageSimulationContext> extends Simulatio
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
         PageTableDescriptor victimDescriptor = victimFrameMapping.descriptor();
-        return String.format("Evicted frame 0x%X (user %d, page %d)%s.",
-                victimFrame, victimFrameMapping.user(), victimFrameMapping.page(),
-                victimDescriptor.isDirty() ? ", writing back to disk" : "");
+        return victimDescriptor.isDirty()
+                ? new StepDescription(StepDescriptionKey.FRAME_EVICTED_DIRTY,
+                        victimFrame, victimFrameMapping.user(), victimFrameMapping.page())
+                : new StepDescription(StepDescriptionKey.FRAME_EVICTED,
+                        victimFrame, victimFrameMapping.user(), victimFrameMapping.page());
     }
 
     /** The frame chosen as the eviction victim; valid once {@link #execute()} has run. */

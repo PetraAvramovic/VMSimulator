@@ -23,9 +23,9 @@ public abstract class FormPhysicalAddressFromTLBStep<T extends SimulationContext
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
-        return String.format("Formed physical address 0x%X from TLB entry (frame 0x%X).",
+        return new StepDescription(StepDescriptionKey.PHYSICAL_ADDRESS_FROM_TLB,
                 context.getCurrentPhysicalAddress(), entry.getBlock());
     }
 }

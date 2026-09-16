@@ -1,16 +1,16 @@
 package rs.ac.bg.etf.viewmodel;
 
 import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.SortedMap;
 
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.LongProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleLongProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
@@ -23,6 +23,7 @@ import rs.ac.bg.etf.model.simulation.SimulationContext;
 import rs.ac.bg.etf.model.simulation.step.InstructionFetchStep;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.page.PageEvictionStep;
+import rs.ac.bg.etf.model.simulation.step.page.PageFaultStep;
 import rs.ac.bg.etf.model.simulation.step.page.PageLoadIntoMemoryStep;
 import rs.ac.bg.etf.model.simulation.step.page.PageStoreToDiskStep;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
@@ -66,7 +67,19 @@ public class PagedOSTabViewModel
     private final Simulation simulation;
     private final PageOSMemoryManager osManager;
 
-    private final ObservableList<FrameRow> frameRows = FXCollections.observableArrayList();
+    // The frame table is windowed: the view shows a small fixed number of rows and asks
+    // for them one at a time via frameRowAt(frame). Physical memory can have billions of
+    // frames, so nothing is ever materialised per frame. windowStart (a long, over the
+    // full frame range) is driven by the view's scrollbar / wheel / seek field, and by
+    // refresh() recentring on the active frame. framesRevision is bumped whenever the
+    // rows may have changed (marker frames, a step) so the view re-renders its window.
+    private final LongProperty windowStart = new SimpleLongProperty(0);
+    private int visibleRowCount = 1;
+    private long markerActiveFrame = -1;
+    private long markerEvictingFrame = -1;
+    private long markerVictimFrame = -1;
+    private final IntegerProperty framesRevision = new SimpleIntegerProperty(0);
+
     private final ObservableList<QueueChip> replacementOrder = FXCollections.observableArrayList();
     private final ObservableList<DiskWord> diskBlockWords = FXCollections.observableArrayList();
     private final ObservableList<UserSummary> userSummaries = FXCollections.observableArrayList();
@@ -85,9 +98,8 @@ public class PagedOSTabViewModel
     private final StringProperty activeFramePageHex = new SimpleStringProperty("/");
 
     private final BooleanProperty diskEngaged = new SimpleBooleanProperty(false);
+    /** Whether physical memory is full (drives the FIFO panel's next-victim highlight). */
     private final BooleanProperty memoryFull = new SimpleBooleanProperty(false);
-    /** Row index of the frame the current OS sub-flow touches, or -1. Row index == frame number. */
-    private final IntegerProperty activeFrameIndex = new SimpleIntegerProperty(-1);
 
     private final Map<OsLine, BooleanProperty> lineActive = new EnumMap<>(OsLine.class);
 
@@ -140,7 +152,53 @@ public class PagedOSTabViewModel
 
     // ---- observable surface ----------------------------------------------------------
 
-    public ObservableList<FrameRow> getFrameRows() { return frameRows; }
+    /** First frame of the frame-table window; driven by the view (scrollbar / wheel / seek) and by refresh(). */
+    public LongProperty windowStartProperty() { return windowStart; }
+
+    /** The frame-table view tells the model how many rows it shows, for window clamping / centring. */
+    public void setVisibleRowCount(int rows) { this.visibleRowCount = Math.max(1, rows); setWindowStart(windowStart.get()); }
+
+    /** Clamped to keep a full window inside {@code [0, frameCount)}. */
+    public void setWindowStart(long start)
+    {
+        long max = Math.max(0, frameCount - visibleRowCount);
+        windowStart.set(Math.max(0, Math.min(start, max)));
+    }
+
+    public void centerWindowOn(long frame) { setWindowStart(frame - visibleRowCount / 2); }
+
+    /** Builds the frame-table row for one frame on demand (only the visible window is ever asked for). */
+    public FrameRow frameRowAt(long frame)
+    {
+        FrameMapping mapping = osManager.getFrameMapping(frame);
+        boolean locked = osManager.isLocked(frame);
+
+        FrameState state;
+        if (frame == markerEvictingFrame)
+            state = FrameState.EVICTING;
+        else if (locked)
+            state = FrameState.KERNEL;
+        else if (mapping == null)
+            state = FrameState.FREE;
+        else if (frame == markerVictimFrame)
+            state = FrameState.VICTIM;
+        else
+            state = FrameState.ALLOCATED;
+
+        PageTableDescriptor descriptor = mapping != null ? mapping.descriptor() : null;
+        return new FrameRow(
+                frame, state,
+                mapping != null ? mapping.user() : -1,
+                mapping != null ? mapping.page() : -1,
+                descriptor != null && descriptor.isValid(),
+                descriptor != null && descriptor.isDirty(),
+                descriptor != null ? descriptor.getDisk() : 0,
+                frame == markerActiveFrame,
+                frame == markerVictimFrame);
+    }
+
+    /** Bumped whenever the frame-table rows may have changed, so the view re-renders its window. */
+    public IntegerProperty framesRevisionProperty() { return framesRevision; }
     public ObservableList<QueueChip> getReplacementOrder() { return replacementOrder; }
     public ObservableList<DiskWord> getDiskBlockWords() { return diskBlockWords; }
     public ObservableList<UserSummary> getUserSummaries() { return userSummaries; }
@@ -160,7 +218,6 @@ public class PagedOSTabViewModel
 
     public BooleanProperty diskEngagedProperty() { return diskEngaged; }
     public BooleanProperty memoryFullProperty() { return memoryFull; }
-    public IntegerProperty activeFrameIndexProperty() { return activeFrameIndex; }
 
     /** True while the given connector's step has run since the last instruction fetch. */
     public BooleanProperty lineActiveProperty(OsLine line) { return lineActive.get(line); }
@@ -176,9 +233,9 @@ public class PagedOSTabViewModel
 
         long activeFrame = -1;
         long evictingFrame = -1;
-        if (lastFrameStep instanceof PageLoadIntoMemoryStep<?> load)
+        if (lastFrameStep instanceof PageLoadIntoMemoryStep<?>)
         {
-            activeFrame = load.getFrame();
+            activeFrame = context.getCurrentFrame();
         }
         else if (lastFrameStep instanceof PageStoreToDiskStep<?> store)
         {
@@ -191,15 +248,26 @@ public class PagedOSTabViewModel
             evictingFrame = activeFrame;
         }
 
-        activeFrameIndex.set(activeFrame >= 0 ? (int) activeFrame : -1);
-
         boolean full = osManager.getFreeFrame() == -1;
         memoryFull.set(full);
 
         List<Long> order = osManager.getReplacementOrder();
-        long nextVictimFrame = (full && !order.isEmpty()) ? order.get(0) : -1;
+        long fifoHead = order.isEmpty() ? -1 : order.get(0);
+        // FIFO panel: the head is "next victim" whenever memory is full.
+        long nextVictimFrame = full ? fifoHead : -1;
+        // Frame table: highlight the victim only on the step where a fault has found memory
+        // full and eviction is the next thing that will happen.
+        boolean evictionImminent = full && fifoHead >= 0 && lastExecutedStep() instanceof PageFaultStep;
+        long tableVictimFrame = evictionImminent ? fifoHead : -1;
 
-        rebuildFrameRows(activeFrame, evictingFrame, nextVictimFrame);
+        markerActiveFrame = activeFrame;
+        markerEvictingFrame = evictingFrame;
+        markerVictimFrame = tableVictimFrame;
+        // An OS event touched a frame -> jump the window to it; otherwise leave it where
+        // the user scrolled it.
+        if (activeFrame >= 0)
+            centerWindowOn(activeFrame);
+        framesRevision.set(framesRevision.get() + 1);
         rebuildReplacementOrder(order);
         rebuildUserSummaries();
 
@@ -208,18 +276,17 @@ public class PagedOSTabViewModel
         diskEngaged.set(loadLit || writeLit);
 
         // The incoming page is read from its own backing block; a dirty victim is written to
-        // the victim page's backing block -- two different disk addresses.
-        PageTableDescriptor incoming = context.getCurrentDescriptor();
-        long loadDiskAddr = (loadLit && incoming != null) ? incoming.getDisk() : -1;
+        // the victim page's backing block -- two different disk addresses. Read from
+        // currentLoadDiskAddress (set only by PageLoadIntoMemoryStep), not currentDescriptor:
+        // that field is shared scratch state a later instruction's PageFaultStep.undo() can
+        // null out during a multi-instruction rewind, which would blank this value even while
+        // this instruction's load step is still the active one.
+        long loadDiskAddr = loadLit ? context.getCurrentLoadDiskAddress() : -1;
         PageStoreToDiskStep<?> storeStep = storeSinceFetch();
         long writeDiskAddr = (writeLit && storeStep != null) ? storeStep.getDiskAddress() : -1;
 
-        // The disk box shows whichever transfer is most recent.
-        long boxDiskAddr = -1;
-        if (lastFrameStep instanceof PageStoreToDiskStep<?> s)
-            boxDiskAddr = s.getDiskAddress();
-        else if (lastFrameStep instanceof PageLoadIntoMemoryStep<?> && incoming != null)
-            boxDiskAddr = incoming.getDisk();
+        // The disk box only shows a block while a transfer step is the current step.
+        long boxDiskAddr = writeLit ? writeDiskAddr : (loadLit ? loadDiskAddr : -1);
         rebuildDiskBlock(boxDiskAddr);
 
         nextVictimHex.set(nextVictimFrame >= 0 ? toHex(nextVictimFrame, frameHexDigits.get()) : "/");
@@ -228,41 +295,6 @@ public class PagedOSTabViewModel
         writeBackValueHex.set(writeDiskAddr >= 0 ? toHex(writeDiskAddr, diskHexDigits.get()) : "/");
 
         setActiveFrameOwner(activeFrame, evictionStep);
-    }
-
-    private void rebuildFrameRows(long activeFrame, long evictingFrame, long nextVictimFrame)
-    {
-        // Every frame is a row (the frame-table view virtualises + scrolls); row index == frame number.
-        java.util.ArrayList<FrameRow> rows = new java.util.ArrayList<>((int) frameCount);
-        for (long frame = 0; frame < frameCount; frame++)
-        {
-            FrameMapping mapping = osManager.getFrameMapping(frame);
-            boolean locked = osManager.isLocked(frame);
-
-            FrameState state;
-            if (frame == evictingFrame)
-                state = FrameState.EVICTING;
-            else if (locked)
-                state = FrameState.KERNEL;
-            else if (mapping == null)
-                state = FrameState.FREE;
-            else if (frame == nextVictimFrame)
-                state = FrameState.VICTIM;
-            else
-                state = FrameState.ALLOCATED;
-
-            PageTableDescriptor descriptor = mapping != null ? mapping.descriptor() : null;
-            rows.add(new FrameRow(
-                    frame, state,
-                    mapping != null ? mapping.user() : -1,
-                    mapping != null ? mapping.page() : -1,
-                    descriptor != null && descriptor.isValid(),
-                    descriptor != null && descriptor.isDirty(),
-                    descriptor != null ? descriptor.getDisk() : 0,
-                    frame == activeFrame,
-                    frame == nextVictimFrame));
-        }
-        frameRows.setAll(rows);
     }
 
     private void rebuildReplacementOrder(List<Long> order)
@@ -320,37 +352,26 @@ public class PagedOSTabViewModel
         }
     }
 
-    // Walk executed steps back to (but excluding) the most recent instruction fetch,
-    // unioning the connectors each step type touches, so wires stay lit for the rest of
-    // that instruction.
-    private void recomputeActiveLines()
+    /** The single most-recently-executed step, or null before any step has run. */
+    private SimulationStep<? extends SimulationContext> lastExecutedStep()
     {
-        Set<OsLine> active = EnumSet.noneOf(OsLine.class);
-
         List<SimulationStep<? extends SimulationContext>> history = simulation.getExecutedSteps();
-        for (int i = history.size() - 1; i >= 0; i--)
-        {
-            SimulationStep<? extends SimulationContext> step = history.get(i);
-            if (step instanceof InstructionFetchStep)
-                break;
-
-            active.addAll(linesFor(step));
-        }
-
-        for (OsLine line : OsLine.values())
-            lineActive.get(line).set(active.contains(line));
+        return history.isEmpty() ? null : history.get(history.size() - 1);
     }
 
-    private static Set<OsLine> linesFor(SimulationStep<? extends SimulationContext> step)
+    // The disk load / write-back wires each represent one specific step, and the two
+    // happen back to back on a dirty fault -- so, unlike the MMU/TLB tabs, a wire is lit
+    // only while its own step is the one that just executed, not for the rest of the
+    // instruction.
+    private void recomputeActiveLines()
     {
-        if (step instanceof PageLoadIntoMemoryStep)
-            return EnumSet.of(OsLine.LOAD_PAGE, OsLine.FRAME_ROW);
-        if (step instanceof PageStoreToDiskStep)
-            return EnumSet.of(OsLine.WRITE_BACK, OsLine.FRAME_ROW);
-        if (step instanceof PageEvictionStep)
-            return EnumSet.of(OsLine.FRAME_ROW);
+        SimulationStep<? extends SimulationContext> last = lastExecutedStep();
 
-        return EnumSet.noneOf(OsLine.class);
+        boolean load = last instanceof PageLoadIntoMemoryStep;
+        boolean store = last instanceof PageStoreToDiskStep;
+        lineActive.get(OsLine.LOAD_PAGE).set(load);
+        lineActive.get(OsLine.WRITE_BACK).set(store);
+        lineActive.get(OsLine.FRAME_ROW).set(load || store || last instanceof PageEvictionStep);
     }
 
     /** Most recent load / store / eviction step since the last instruction fetch, or null. */

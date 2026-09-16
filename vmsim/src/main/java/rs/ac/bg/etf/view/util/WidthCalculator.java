@@ -8,9 +8,16 @@ public class WidthCalculator {
     private static final Font HEADER_FONT = Font.font("Consolas", javafx.scene.text.FontWeight.BOLD, 12);
     private static final double CELL_PADDING = 16;
 
-    public static double columnWidth(String header, int digits) 
+    /** Column of hex values rendered as "0x" + digits, e.g. "Frame"/"Disk" -- the +2 accounts for "0x". */
+    public static double columnWidth(String header, int digits)
     {
-        Text valueSample = new Text("F".repeat(Math.max(digits + 2, 1)));
+        return plainColumnWidth(header, digits + 2);
+    }
+
+    /** Column of plain (no "0x" prefix) fixed-width text, e.g. a decimal count or a short code. */
+    public static double plainColumnWidth(String header, int charCount)
+    {
+        Text valueSample = new Text("F".repeat(Math.max(charCount, 1)));
         valueSample.setFont(CELL_FONT);
         Text headerSample = new Text(header);
         headerSample.setFont(HEADER_FONT);

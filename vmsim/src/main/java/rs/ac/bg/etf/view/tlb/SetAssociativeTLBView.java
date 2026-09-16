@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
@@ -106,7 +107,11 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
             blockBitsLabels.add(bits);
         }
 
-        blockValueLabel.textProperty().bind(blockHex);
+        // resolvedWay (and so this label's visibility below) can be known before the block-output
+        // step has actually run -- gate the text on blockActive too, or it flashes blockHex's raw
+        // "/" placeholder for the resolved way in that window.
+        blockValueLabel.textProperty().bind(Bindings.createStringBinding(
+                () -> blockActive.get() ? blockHex.getValue() : "", blockActive, blockHex));
 
         overlay.setMouseTransparent(true);
         overlay.getChildren().add(busLine);

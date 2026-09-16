@@ -45,11 +45,11 @@ public abstract class TLBLookupStep<T extends SimulationContext> extends Simulat
     }
 
     @Override
-    public String getDescription()
+    public StepDescription getStepDescription()
     {
         return lastLookupResult != null
-                ? String.format("TLB lookup: hit (frame 0x%X).", lastLookupResult.getBlock())
-                : "TLB lookup: miss.";
+                ? new StepDescription(StepDescriptionKey.TLB_LOOKUP_HIT, lastLookupResult.getBlock())
+                : new StepDescription(StepDescriptionKey.TLB_LOOKUP_MISS);
     }
 
 }
