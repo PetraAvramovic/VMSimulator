@@ -1,7 +1,10 @@
 package rs.ac.bg.etf.view;
 
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Bounds;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -12,8 +15,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Polyline;
-import javafx.scene.shape.Rectangle;
-import rs.ac.bg.etf.view.os.DiskBlockPopup;
+import rs.ac.bg.etf.view.inspector.DiskBlockInspectorWindow;
 import rs.ac.bg.etf.view.os.FrameTableView;
 import rs.ac.bg.etf.view.os.ReplacementQueueView;
 import rs.ac.bg.etf.view.os.UserSummaryView;
@@ -38,10 +40,6 @@ public class PagedOSTabView extends StackPane
     private static final double COLUMN_GAP = 200;
     /** Minimum table-to-disk-box gap, so the wire captions always fit. */
     private static final double WIRE_GAP = 200;
-    /** The disk box's "platter stack" motif: a few short cylinders behind the address readout. */
-    private static final int DISK_PLATTER_COUNT = 3;
-    private static final double DISK_PLATTER_HEIGHT = 22;
-    private static final double DISK_PLATTER_GAP = 8;
 
     private static final javafx.css.PseudoClass ACTIVE = javafx.css.PseudoClass.getPseudoClass("active");
 
@@ -64,54 +62,53 @@ public class PagedOSTabView extends StackPane
         double rightX = TABLE_X + table.panelWidth() + COLUMN_GAP;
 
         // ---- Disk box (right column, top) -----------------------------------------
-        DiskBlockPopup popup = new DiskBlockPopup(viewModel);
+        DiskBlockInspectorWindow diskInspector =
+                new DiskBlockInspectorWindow(viewModel.getContext(), viewModel.currentStepNumberProperty());
 
-        Label diskTitle = new Label("Disk");
-        diskTitle.getStyleClass().add("mmu-section-label");
+        // "Disk" sits above the card, left-aligned, the same treatment "Frame table" and
+        // "Eviction policy (FIFO)" get for their own panels below -- not stacked inside the card
+        // itself, which read as part of the card's own data rather than a heading for it.
+        Label diskHeader = FieldBoxes.sectionLabel("Disk", rightX, TABLE_Y - 26);
 
         Label addressTitle = new Label("Address");
         addressTitle.getStyleClass().add("va-breakdown-title");
 
+        // Plain value text, not a bordered cell nested inside the disk card -- a box-within-a-box
+        // read as if the address had some separate identity from the disk itself. The card's own
+        // border (.os-disk-box, the same flat framed-card style as the MMU tab's standalone value
+        // boxes) is the only box now; the address is just its value, like Current VA/PA in the
+        // sidebar.
         int diskDigits = Math.max(1, viewModel.diskHexDigitsProperty().get());
-        Region diskAddressCell = FieldBoxes.valueCell(
-                "va-breakdown-cell-solo", viewModel.diskAddressHexProperty(), diskDigits);
-        // FieldBoxes sizes the cell from a detached Label.prefWidth, which under-measures a wide
-        // (8-hex-digit) disk address; re-size it from a real Text measurement so it never clips.
-        double addrCellW = textWidth("0x" + "F".repeat(diskDigits), FieldBoxes.FIELD_FONT) + FieldBoxes.FIELD_PADDING;
-        diskAddressCell.setMinWidth(addrCellW);
-        diskAddressCell.setPrefWidth(addrCellW);
-        diskAddressCell.setMaxWidth(addrCellW);
+        Label diskAddressValue = new Label();
+        diskAddressValue.getStyleClass().add("va-breakdown-value");
+        diskAddressValue.setFont(FieldBoxes.FIELD_FONT);
+        diskAddressValue.textProperty().bind(viewModel.diskAddressHexProperty());
 
-        // The platter stack is a bit wider than the address cell it frames, so it reads as the
-        // disk "body" the reading sits inside rather than a same-size box behind an identical box.
-        double platterWidth = addrCellW + 40;
-        double platterStackHeight = DISK_PLATTER_COUNT * DISK_PLATTER_HEIGHT
-                + (DISK_PLATTER_COUNT - 1) * DISK_PLATTER_GAP;
-        Node platterStack = diskPlatterStack(platterWidth);
-
-        // "Address" sits above this StackPane (like the Page/Word titles above their value cells
-        // elsewhere) rather than inside it, so it never lands on top of the topmost platter.
-        StackPane diskGraphic = new StackPane(platterStack, diskAddressCell);
-        diskGraphic.setPrefSize(platterWidth, Math.max(platterStackHeight, diskAddressCell.prefHeight(-1)));
-
-        Label diskSummary = new Label();
-        diskSummary.textProperty().bind(viewModel.diskBlockSummaryProperty());
-        diskSummary.getStyleClass().add("os-disk-summary");
-
-        VBox diskBox = new VBox(6, diskTitle, addressTitle, diskGraphic, diskSummary);
+        VBox diskBox = new VBox(6, addressTitle, diskAddressValue);
         diskBox.getStyleClass().add("os-disk-box");
         diskBox.setAlignment(Pos.CENTER);
-        // Size to the widest of the platter stack and the summary text, so nothing clips.
-        double diskBoxW = Math.max(platterWidth, textWidth("no non-zero data present")) + 32;
+        // Sized to the address value alone (measured the same way FieldBoxes' own boxes are, so a
+        // wide 8-hex-digit address never clips).
+        double addrTextW = textWidth("0x" + "F".repeat(diskDigits), FieldBoxes.FIELD_FONT);
+        double diskBoxW = addrTextW + 32;
         diskBox.setPrefWidth(diskBoxW);
         diskBox.setMinWidth(diskBoxW);
-        diskBox.setLayoutX(rightX);
         diskBox.setLayoutY(TABLE_Y);
-        diskBox.setCursor(javafx.scene.Cursor.HAND);
-        diskBox.setOnMouseClicked(e -> popup.toggle(getScene() != null ? getScene().getWindow() : null));
-        // Clickability now reads through the :hover style (see light-theme.css) instead of a
-        // permanent "click for..." caption competing with the disk-block summary for attention.
-        bindOpacity(diskBox, viewModel.diskEngagedProperty());
+        // Only while a transfer is actually in flight is there a real block to open. The cursor
+        // and the CSS :hover cue (see .os-disk-box:active:hover in light-theme.css) both only
+        // engage while diskEngaged is true too, so an inactive box gives no "this is clickable"
+        // signal at all -- hovering it and having nothing happen on click read as broken.
+        diskBox.cursorProperty().bind(Bindings.when(viewModel.diskEngagedProperty())
+                .then(javafx.scene.Cursor.HAND).otherwise(javafx.scene.Cursor.DEFAULT));
+        diskBox.setOnMouseClicked(e -> {
+            long address = viewModel.getCurrentDiskAddress();
+            if (address >= 0)
+                diskInspector.toggle(getScene() != null ? getScene().getWindow() : null, address);
+        });
+        // Lit (border turns blue) while a load/write step is the current step, the same :active
+        // convention every wire/value in the schematic tabs uses -- not dimmed the rest of the
+        // time, which read as "disabled" rather than "nothing to show right now".
+        bindActive(diskBox, viewModel.diskEngagedProperty());
 
         // ---- Disk <-> active frame row wires ---------------------------------------
         Polyline loadWire = connector();
@@ -124,6 +121,25 @@ public class PagedOSTabView extends StackPane
         Label writeCaption = wireLabel("write back");
         Label writeValue = boundWireLabel(viewModel.writeBackValueHexProperty());
 
+        // Caption/value stacks are centred on their own run and follow it via a live binding on
+        // each label's own widthProperty() -- not a one-shot prefWidth() snapshot recomputed
+        // imperatively on every wire update, which could measure a label's width before its bound,
+        // frequently-changing text (loadValue/writeValue) had actually been laid out with its real
+        // CSS font, silently leaving the centred text shifted off from its caption above/below it.
+        // updateWires() below only ever sets these four properties; the labels re-centre themselves.
+        DoubleProperty loadStackX = new SimpleDoubleProperty();
+        DoubleProperty loadStackBaseY = new SimpleDoubleProperty();
+        DoubleProperty writeStackX = new SimpleDoubleProperty();
+        DoubleProperty writeStackBaseY = new SimpleDoubleProperty();
+        bindCenteredX(loadCaption, loadStackX);
+        bindCenteredX(loadValue, loadStackX);
+        loadCaption.layoutYProperty().bind(loadStackBaseY.subtract(45));
+        loadValue.layoutYProperty().bind(loadStackBaseY.subtract(29));
+        bindCenteredX(writeCaption, writeStackX);
+        bindCenteredX(writeValue, writeStackX);
+        writeCaption.layoutYProperty().bind(writeStackBaseY.add(13));
+        writeValue.layoutYProperty().bind(writeStackBaseY.add(29));
+
         bindVisible(viewModel.lineActiveProperty(OsLine.LOAD_PAGE), loadWire, loadArrow, loadCaption, loadValue);
         bindVisible(viewModel.lineActiveProperty(OsLine.WRITE_BACK), writeWire, writeArrow, writeCaption, writeValue);
         bindActive(loadWire, viewModel.lineActiveProperty(OsLine.LOAD_PAGE));
@@ -135,53 +151,64 @@ public class PagedOSTabView extends StackPane
         bindActive(writeCaption, viewModel.lineActiveProperty(OsLine.WRITE_BACK));
         bindActive(writeValue, viewModel.lineActiveProperty(OsLine.WRITE_BACK));
 
-        // ---- Eviction policy (right column, below the disk box) ------------------
-        Label fifoHeader = FieldBoxes.sectionLabel("Eviction policy (FIFO)", rightX, TABLE_Y);
-        double rightColW = Math.max(diskBoxW, 300);
+        // ---- Eviction policy + per-user summary (below the frame table) ----------
+        // Only the disk stays beside the table in its own right-hand column; everything else
+        // that used to share that column now stacks under the (now taller) table instead, using
+        // the width that frees up below it rather than being squeezed into the disk's own width.
+        Label fifoHeader = FieldBoxes.sectionLabel("Eviction policy (FIFO)", TABLE_X, TABLE_Y);
         ReplacementQueueView fifo = new ReplacementQueueView(viewModel);
-        fifo.setPrefWrapLength(rightColW);
-        fifo.setMaxWidth(rightColW);
 
         Label nextVictimLabel = new Label();
         nextVictimLabel.getStyleClass().add("os-disk-summary");
         nextVictimLabel.textProperty().bind(viewModel.nextVictimHexProperty()
                 .map(hex -> "/".equals(hex) ? "" : "next victim: frame " + hex));
 
-        // ---- Per-user page-table summary (right column, bottom) -----------------
+        // ---- Per-user page-table summary (below the eviction policy) ------------
         // User count is small (power of two, validated) so the panel just renders inline;
         // the whole tab already scrolls via the outer ScrollPane.
         UserSummaryView summary = new UserSummaryView(viewModel);
 
+        for (Node n : new Node[] { fifoHeader, fifo, nextVictimLabel, summary })
+            n.setLayoutX(TABLE_X);
+
+        // The disk box is the only thing left in the right-hand column, so it alone drives both
+        // the binding and the floor below -- flush against the tab's real right edge, exactly like
+        // PagedMMUTabView/PagedTLBTabView bind their own Physical Address box, instead of
+        // recomputing setLayoutX imperatively on every relayout pass. canvas.setMinWidth is the
+        // floor that guarantees room for the table + wire captions + disk box even when the
+        // viewport is narrower than that (the ScrollPane scrolls horizontally past it, same as
+        // MIN_CANVAS_WIDTH does on the other schematic tabs).
+        double tableRight = TABLE_X + table.panelWidth();
+        canvas.setMinWidth(tableRight + WIRE_GAP + diskBoxW + MARGIN);
+        var colX = canvas.widthProperty().subtract(MARGIN).subtract(diskBoxW);
+        diskHeader.layoutXProperty().bind(colX);
+        diskBox.layoutXProperty().bind(colX);
+
         canvas.getChildren().addAll(
-                memHeader, table, diskBox,
+                memHeader, table, diskHeader, diskBox,
                 loadWire, loadArrow, loadCaption, loadValue,
                 writeWire, writeArrow, writeCaption, writeValue,
                 fifoHeader, fifo, nextVictimLabel, summary);
 
         ScrollPane scrollPane = new ScrollPane(canvas);
         scrollPane.getStyleClass().addAll("mmu-scroll-pane", "slim-scroll");
+        // Grows canvas to fill the viewport's real width when it's wider than canvas's own
+        // minWidth (never narrower -- that floor still applies below it) -- matches
+        // PagedMMUTabView/PagedTLBTabView's own ScrollPane treatment exactly.
+        scrollPane.setFitToWidth(true);
         getChildren().add(scrollPane);
 
         Runnable updateWires = () -> updateWires(
                 table, diskBox,
                 loadWire, loadArrow, loadCaption, loadValue,
-                writeWire, writeArrow, writeCaption, writeValue);
+                writeWire, writeArrow, writeCaption, writeValue,
+                loadStackX, loadStackBaseY, writeStackX, writeStackBaseY);
 
-        // Responsive layout: the right column is pushed toward the right edge of the
-        // viewport (so the tab isn't a narrow strip with a big void), but never closer
-        // than WIRE_GAP to the table, so the wire captions always have room.
-        double tableRight = TABLE_X + table.panelWidth();
+        // Vertical stacking still has to happen imperatively (each section's Y depends on the
+        // real, dynamically-changing height of the one above it), so it stays a recomputed
+        // Runnable; only the canvas's own height (to fill a tall viewport) is derived alongside it.
         Runnable relayout = () -> {
-            double viewportW = scrollPane.getViewportBounds() != null
-                    ? scrollPane.getViewportBounds().getWidth() : CANVAS_WIDTH;
-            double colX = Math.max(tableRight + WIRE_GAP, viewportW - MARGIN - rightColW);
-
-            for (javafx.scene.Node n : new javafx.scene.Node[] { diskBox, fifoHeader, fifo, nextVictimLabel, summary })
-                n.setLayoutX(colX);
-
-            // layoutBounds, not boundsInParent: effect-immune, so the disk box's :hover drop-shadow
-            // never nudges the sections stacked below it.
-            double y = diskBox.getLayoutY() + diskBox.getLayoutBounds().getHeight() + 30;
+            double y = table.getLayoutY() + tableHeight + 30;
             fifoHeader.setLayoutY(y);
             y += 22;
             fifo.setLayoutY(y);
@@ -190,10 +217,10 @@ public class PagedOSTabView extends StackPane
             y += 26;
             summary.setLayoutY(y);
 
-            double contentBottom = Math.max(table.getLayoutY() + tableHeight,
+            // layoutBounds, not boundsInParent: effect-immune, so the disk box's :hover drop-shadow
+            // never affects the computed content height.
+            double contentBottom = Math.max(diskBox.getLayoutY() + diskBox.getLayoutBounds().getHeight(),
                     summary.getLayoutY() + summary.getLayoutBounds().getHeight());
-            double contentRight = colX + rightColW;
-            canvas.setPrefWidth(Math.max(viewportW, contentRight + MARGIN));
             canvas.setPrefHeight(Math.max(scrollPane.getViewportBounds() != null
                     ? scrollPane.getViewportBounds().getHeight() : CANVAS_HEIGHT, contentBottom + MARGIN));
             updateWires.run();
@@ -213,7 +240,9 @@ public class PagedOSTabView extends StackPane
     private void updateWires(
             FrameTableView table, Region diskBox,
             Polyline loadWire, Polyline loadArrow, Label loadCaption, Label loadValue,
-            Polyline writeWire, Polyline writeArrow, Label writeCaption, Label writeValue)
+            Polyline writeWire, Polyline writeArrow, Label writeCaption, Label writeValue,
+            DoubleProperty loadStackX, DoubleProperty loadStackBaseY,
+            DoubleProperty writeStackX, DoubleProperty writeStackBaseY)
     {
         Region rowAnchor = table.activeRowAnchorProperty().get();
         if (rowAnchor == null || rowAnchor.getScene() == null || diskBox.getScene() == null)
@@ -243,23 +272,30 @@ public class PagedOSTabView extends StackPane
         writeWire.getPoints().setAll(rowX, rowY + 7, writeKneeX, rowY + 7, writeKneeX, diskY + 7, diskX, diskY + 7);
         writeArrow.getPoints().setAll(diskX - 9, diskY + 2, diskX, diskY + 7, diskX - 9, diskY + 12);
 
-        // load caption + value stack, centred on the run near the disk box, fully above it
-        double loadMid = (loadKneeX + diskX) / 2;
-        centre(loadCaption, loadMid, diskY - 45);
-        centre(loadValue, loadMid, diskY - 29);
-        // write caption + value stack, centred on the run near the table, fully below it
-        double writeMid = (rowX + writeKneeX) / 2;
-        centre(writeCaption, writeMid, rowY + 13);
-        centre(writeValue, writeMid, rowY + 29);
+        // load caption + value stack, centred on the run near the disk box, fully above it.
+        // write caption + value stack, centred on the run near the table, fully below it. Only the
+        // target properties are set here -- the labels' own bindCenteredX/layoutYProperty bindings
+        // (set up once in the constructor) do the actual positioning.
+        loadStackX.set((loadKneeX + diskX) / 2);
+        loadStackBaseY.set(diskY);
+        writeStackX.set((rowX + writeKneeX) / 2);
+        writeStackBaseY.set(rowY);
 
         for (Node n : new Node[] { loadWire, loadArrow, loadCaption, loadValue, writeWire, writeArrow, writeCaption, writeValue })
             n.toFront();
     }
 
-    private static void centre(Label label, double cx, double y)
+    // Keeps a label centred on a live target X as a standing binding, driven by the label's own
+    // widthProperty() rather than a one-shot prefWidth() snapshot taken whenever the wire happens
+    // to be recomputed. loadValue/writeValue's text rebinds on every step, and widthProperty only
+    // reports the real (CSS-resolved) width once layout has actually measured the new text -- so
+    // this re-centres itself exactly when that settles, instead of risking a stale/pre-layout
+    // width that would silently shift the text off from its caption above/below it.
+    private static void bindCenteredX(Label label, DoubleProperty centerX)
     {
-        label.setLayoutX(cx - label.prefWidth(-1) / 2);
-        label.setLayoutY(y);
+        label.layoutXProperty().bind(Bindings.createDoubleBinding(
+                () -> centerX.get() - label.getWidth() / 2.0,
+                centerX, label.widthProperty()));
     }
 
     private Polyline connector()
@@ -274,32 +310,6 @@ public class PagedOSTabView extends StackPane
         Label label = new Label(text);
         label.getStyleClass().add("os-wire-label");
         return label;
-    }
-
-    /**
-     * A few short "platters" stacked with small gaps -- a classic disk-drum motif standing in
-     * for the disk box's plain rectangle. Purely decorative background behind the address
-     * readout (see the disk box's StackPane); fill/stroke live in .os-disk-platter (light-theme.css).
-     */
-    private static Node diskPlatterStack(double width)
-    {
-        VBox stack = new VBox(DISK_PLATTER_GAP);
-        stack.setAlignment(Pos.CENTER);
-        for (int i = 0; i < DISK_PLATTER_COUNT; i++)
-        {
-            Rectangle platter = new Rectangle(width, DISK_PLATTER_HEIGHT);
-            platter.setArcWidth(DISK_PLATTER_HEIGHT);
-            platter.setArcHeight(DISK_PLATTER_HEIGHT);
-            platter.getStyleClass().add("os-disk-platter");
-            stack.getChildren().add(platter);
-        }
-        return stack;
-    }
-
-    // Rendered width of an .os-disk-summary label (Consolas 11), for sizing the disk box to its content.
-    private static double textWidth(String text)
-    {
-        return textWidth(text, javafx.scene.text.Font.font("Consolas", 11));
     }
 
     private static double textWidth(String text, javafx.scene.text.Font font)
@@ -326,11 +336,6 @@ public class PagedOSTabView extends StackPane
         }
     }
 
-    private void bindOpacity(Node node, BooleanProperty engaged)
-    {
-        node.setOpacity(engaged.get() ? 1.0 : 0.5);
-        engaged.addListener((o, ov, nv) -> node.setOpacity(nv ? 1.0 : 0.5));
-    }
 
     private void bindActive(Node node, BooleanProperty active)
     {

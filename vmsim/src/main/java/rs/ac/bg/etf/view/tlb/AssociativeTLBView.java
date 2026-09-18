@@ -27,7 +27,9 @@ import javafx.scene.shape.Line;
 public class AssociativeTLBView extends StackPane implements TLBBodyView
 {
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
-    private static final double BUS_STUB_LENGTH = 18.0;
+    // Scaled up alongside the table's own enlarged ("page-table-inline") row size, so the stubs
+    // still read proportionate to the bigger rows instead of looking stubby against them.
+    private static final double BUS_STUB_LENGTH = 32.0;
 
     private final VBox rowsBox = new VBox();
     // Just the data rows, kept separate from the header so it can be fogged while the header stays crisp.
@@ -46,8 +48,10 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
         this.rows = rows;
 
         // A bordered panel behind the rows so the search-bus stub lines visibly terminate on the
-        // table instead of floating in empty space.
-        rowsBox.getStyleClass().add("tlb-table");
+        // table instead of floating in empty space. "page-table-inline" scales it up to read as the
+        // same size as the MMU tab's own PageTableView (see light-theme.css).
+        rowsBox.getStyleClass().addAll("tlb-table", "page-table-inline");
+        rowsBody.getStyleClass().add("tlb-table-rows");
         rowsBody.getChildren().addAll(rows);
         rowsBox.getChildren().addAll(header, rowsBody);
 
@@ -129,8 +133,11 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
 
             if (!busXResolved) {
                 // Stubs meet the .tlb-table panel's outer border, never the row content inside its
-                // padding, so no segment is drawn across the table body.
-                Bounds panelBounds = linesOverlay.sceneToLocal(rowsBox.localToScene(rowsBox.getBoundsInLocal()));
+                // padding, so no segment is drawn across the table body. layoutBounds, not
+                // boundsInLocal: rowsBody carries a BoxBlur while fogged (see setFogged), which would
+                // otherwise inflate boundsInLocal by the blur radius and drop the panel edges below
+                // the table's real border.
+                Bounds panelBounds = linesOverlay.sceneToLocal(rowsBox.localToScene(rowsBox.getLayoutBounds()));
                 panelLeftX = panelBounds.getMinX();
                 panelCenterX = panelBounds.getCenterX();
                 panelBottomY = panelBounds.getMaxY();

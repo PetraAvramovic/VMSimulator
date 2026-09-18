@@ -16,8 +16,6 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
-import javafx.scene.shape.Line;
-import javafx.scene.shape.Polyline;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TLBType;
 import rs.ac.bg.etf.view.inspector.TLBInspectorWindow;
 import rs.ac.bg.etf.view.shape.BitWidthLine;
@@ -38,34 +36,55 @@ import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel.TlbLine;
 public class PagedTLBTabView extends StackPane
 {
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
-    private static final double CANVAS_WIDTH = 900;
+    // Floor, not a fixed size: the canvas grows to fill the tab's real width (see the ScrollPane's
+    // setFitToWidth below) and PA is bound to that live width, never a hardcoded pixel canvas size --
+    // matches PagedMMUTabView's MIN_CANVAS_WIDTH treatment exactly.
+    private static final double MIN_CANVAS_WIDTH = 900;
     private static final double CANVAS_HEIGHT = 720;
     private static final double MARGIN = 30;
-    private static final double BOX_Y = 60;
-    private static final double BOX_HEIGHT = FieldBoxes.BOX_HEIGHT;
+    // Matches PagedMMUTabView's own boxY (78): the gap from the section-label title (y=20, set by
+    // FieldBoxes.sectionLabel calls below) down to the field-box title (BOX_Y - 20) down to the box
+    // itself must read the same on both schematic tabs.
+    private static final double BOX_Y = 78;
+    // Shared by every field box in the Process/VA/PA row -- User, Page, Word, Block -- so they all
+    // read as one consistent height (the MMU tab's taller "solo" BOX_HEIGHT is only for its own
+    // standalone Page Table Pointer box, which has no counterpart here).
+    private static final double ADDRESS_BOX_HEIGHT = FieldBoxes.ADDRESS_BOX_HEIGHT;
+    private static final double ADDRESS_FIELD_PADDING = FieldBoxes.ADDRESS_FIELD_PADDING;
     private static final double PROCESS_GAP = 64;
     private static final double TABLE_Y = 300;
-    // Roughly AssociativeTLBView's bus-stub length plus the .tlb-table panel padding; only used to
-    // pre-align the body view so the tag line drops near-vertically. The router handles any residual.
-    private static final double BUS_STUB_APPROX = 28;
-    private static final double BRACE_EAR_Y = BOX_Y + BOX_HEIGHT + 72;
+    // How far right of the merge point the table sits -- past AssociativeTLBView's own bus-stub
+    // length, purely for breathing room between the tag wiring and the table (the router recomputes
+    // the live bus anchor either way, so this only steers the body node's initial placement).
+    private static final double BUS_STUB_APPROX = 150;
+    private static final double BRACE_EAR_Y = BOX_Y + ADDRESS_BOX_HEIGHT + 72;
     private static final double BRACE_DEPTH = 16;
     private static final double BRACE_GAP = 8;
     private static final double BLOCK_DROP = 44;
     // Direct-mapped fork geometry: a long k@p stem from the brace tip to the fork bar, then two
     // parallel legs FORK_HALF_WIDTH px either side of it -- the tag leg drops SPLIT_LEG_LEN px to
     // its readout, the index leg drops to the selected row. The table is nudged down/right to fit.
+    // FORK_HALF_WIDTH is wide enough that the tag leg's own labels (tick + value) never crowd the
+    // index leg's, which sits the same distance out on the fork's other side.
     private static final double KP_STEM_LEN = 72;
-    private static final double FORK_HALF_WIDTH = 20;
-    private static final double SPLIT_LEG_LEN = 70;
-    // Vertical gap between the tag leg's horizontal run and the "Tag" caption above it.
-    private static final double TAG_CAPTION_GAP = 10;
-    private static final double DIRECT_TABLE_X = 124;
+    private static final double FORK_HALF_WIDTH = 40;
+    // Long enough that the tag's own bit-width tick reads at a true, visually centred midpoint (not
+    // cramped against the fork bar) with room left below it before the live value readout, which
+    // sits under the wire's dead end -- see tagValueLabel's own gap below.
+    private static final double SPLIT_LEG_LEN = 110;
+    // Gap between the tag leg's dead end and its live hex value readout, matching zeroFillLabel's
+    // own gap treatment in PagedMMUTabView.
+    private static final double TAG_VALUE_GAP = 6;
+    private static final double DIRECT_TABLE_X = 220;
     private static final double DIRECT_TABLE_Y = 84;
     // Set-associative stacks several tables, so it starts them well above the direct/assoc table
     // (the fork sits to their left, not above) -- but still clear of the word pass-through line and
     // the address boxes -- to give the 4-way case a chance of fitting with little/no scrolling.
     private static final double SET_ASSOC_TABLE_Y = 210;
+    // Gap between the "TLB" title's own measured bottom edge and the table's top border, matching
+    // PagedMMUTabView's own TABLE_TITLE_GAP treatment for "Page Table" (live label height, not a
+    // guessed pixel offset, so it holds regardless of font family/size changes down the line).
+    private static final double TABLE_TITLE_GAP = 8;
 
     private final PagedTLBTabViewModel viewModel;
     private final Pane canvas = new Pane();
@@ -86,31 +105,42 @@ public class PagedTLBTabView extends StackPane
     private final boolean split;
 
     private final CurlyBrace tagBrace = new CurlyBrace();
-    private final Polyline tagLine = elbow();
-    private final Line tagTick = tick();
-    private final Label tagBitsLabel;
-    private final Label tagValueLabel = flowLabel();
-    // Static "Tag" caption riding the fork's tag leg (split TLB types only), so the wire itself
-    // reads as the tag wire -- distinct from tagValueLabel, which is its live hex readout.
-    private final Label tagCaptionLabel;
 
-    // Direct-mapped split: k@p stem from the brace tip to the fork (its own tick + bit width + value
-    // readout), then the tag leg (reuses tagTick / tagBitsLabel / tagValueLabel) and the index leg
-    // into the body's address anchor.
-    private final Polyline kpStub = elbow();
-    private final Line kpTick = tick();
-    private final Label kpBitsLabel;
-    private final Label kpValueLabel = flowLabel();
-    private final Polyline leftBranch = elbow();
-    private final Polyline indexBranch = elbow();
-    private final Line indexTick = tick();
-    private final Label indexBitsLabel;
-    private final Label indexValueLabel = flowLabel();
+    // Associative / set-associative (non-split): the whole user@page tag rides one line, brace tip
+    // straight down then across into the body's search-bus anchor -- each straight leg its own
+    // BitWidthLine segment (see BitWidthLine's own doc comment for why an elbow is a chain of
+    // segments rather than one multi-point shape), the same treatment PagedMMUTabView's own elbowed
+    // wires get.
+    private final BitWidthLine tagDown;
+    private final BitWidthLine tagAcross;
 
-    private final Polyline blockOut = elbow();
-    private final Line blockTick = tick();
-    private final Label blockBitsLabel;
-    private final Label blockValueLabel = flowLabel();
+    // Direct-mapped / set-associative (split): the key forks at the brace tip -- a k@p stem down to
+    // the fork bar, then two parallel legs. The tag leg dead-ends in a hex readout coloured by the
+    // lookup outcome; the index leg carries on into the selected row. The tag leg's own "Nb" bit tag
+    // rides its true midpoint (BitWidthLine's usual self-labelling); its live value is a separate,
+    // manually-placed label sitting below the wire's dead end (see tagValueLabel) rather than
+    // BitWidthLine's own mirrored-at-midpoint value label, which read too cramped against the tick.
+    private final BitWidthLine kpDown;
+    private final BitWidthLine tagStub;
+    private final BitWidthLine tagLeg;
+    // The tag leg's live hex value, positioned below its dead end -- see tagLeg's own doc comment.
+    private final Label tagValueLabel;
+    private final BitWidthLine indexStub;
+    private final BitWidthLine indexLeg;
+    private final BitWidthLine indexAcross;
+
+    // Block output: always leaves the bottom of the table, into PA Block. Non-set-associative routes
+    // its own drop/across/rise; set-associative only needs the riser from the body view's own shared
+    // output bus up into the box (the body view draws its own per-way block lines). Both rises are
+    // split into a far segment (no tag) + a near segment whose fixed short span puts its bit-width
+    // tag at the same height as wordUpPA's own tag, instead of at the true midpoint of the whole
+    // (much longer, and for set-associative variably long) drop/tap-to-box run.
+    private final BitWidthLine blockDown;
+    private final BitWidthLine blockAcross;
+    private final BitWidthLine blockUpFar;
+    private final BitWidthLine blockUpNear;
+    private final BitWidthLine blockRiserFar;
+    private final BitWidthLine blockRiserNear;
     private final Region blockBoxPA;
 
     private final Runnable reposition;
@@ -119,49 +149,58 @@ public class PagedTLBTabView extends StackPane
     {
         this.viewModel = viewModel;
         getStyleClass().add("tlb-tab-view");
-        canvas.setPrefSize(CANVAS_WIDTH, CANVAS_HEIGHT);
+        canvas.setMinWidth(MIN_CANVAS_WIDTH);
+        canvas.setPrefHeight(CANVAS_HEIGHT);
 
         int tagDigits = viewModel.tagHexDigitsProperty().get();
         int blockDigits = viewModel.blockHexDigitsProperty().get();
 
         // ---- Process / Virtual Address / Physical Address field boxes -------------------------
+        // Process's User box shares ADDRESS_BOX_HEIGHT with the VA/PA address boxes (not the taller
+        // "solo" BOX_HEIGHT the MMU tab's standalone Page Table Pointer box uses) so all three field
+        // boxes in this row read as one consistent height, only FIELD_PADDING keeps its narrower width.
         Region userBox = FieldBoxes.valueCell("va-breakdown-cell-solo", viewModel.userHexProperty(),
-                ValueConverter.hexDigitsFor(viewModel.getProcessIdBits()));
+                ValueConverter.hexDigitsFor(viewModel.getProcessIdBits()), ADDRESS_BOX_HEIGHT, FieldBoxes.FIELD_PADDING);
         double userBoxW = userBox.getPrefWidth();
         double userBoxX = MARGIN;
         place(userBox, userBoxX, BOX_Y);
 
         Region pageBox = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.pageHexProperty(),
-                ValueConverter.hexDigitsFor(viewModel.getPageBits()));
+                ValueConverter.hexDigitsFor(viewModel.getPageBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double pageBoxW = pageBox.getPrefWidth();
         double pageBoxX = userBoxX + userBoxW + PROCESS_GAP;
         place(pageBox, pageBoxX, BOX_Y);
 
         Region wordBoxVA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.wordHexProperty(),
-                ValueConverter.hexDigitsFor(viewModel.getWordBits()));
+                ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double wordBoxW = wordBoxVA.getPrefWidth();
         double wordBoxVAX = pageBoxX + pageBoxW;
         place(wordBoxVA, wordBoxVAX, BOX_Y);
 
-        double wordBoxPAX = CANVAS_WIDTH - MARGIN - wordBoxW;
+        // Bound to the canvas's own live width (which itself grows to fill the tab -- see the
+        // ScrollPane's setFitToWidth below), not a fixed pixel canvas size, so PA always sits flush
+        // against the tab's real right edge instead of pinned at some fixed offset that leaves unused
+        // space on a wider window -- mirrors PagedMMUTabView's wordBoxPA/blockBoxPA treatment exactly.
         Region wordBoxPA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.paWordHexProperty(),
-                ValueConverter.hexDigitsFor(viewModel.getWordBits()));
-        place(wordBoxPA, wordBoxPAX, BOX_Y);
+                ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
+        wordBoxPA.layoutXProperty().bind(canvas.widthProperty().subtract(MARGIN).subtract(wordBoxW));
+        wordBoxPA.setLayoutY(BOX_Y);
 
-        blockBoxPA = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.blockHexProperty(), blockDigits);
+        blockBoxPA = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.blockHexProperty(), blockDigits, ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double blockBoxW = blockBoxPA.getPrefWidth();
-        double blockBoxPAX = wordBoxPAX - blockBoxW;
-        place(blockBoxPA, blockBoxPAX, BOX_Y);
+        blockBoxPA.layoutXProperty().bind(wordBoxPA.layoutXProperty().subtract(blockBoxW));
+        blockBoxPA.setLayoutY(BOX_Y);
 
-        Label userTitle = FieldBoxes.fieldTitle("User", userBoxX, BOX_Y - 20);
-        Label pageTitle = FieldBoxes.fieldTitle("Page", pageBoxX, BOX_Y - 20);
-        Label wordTitleVA = FieldBoxes.fieldTitle("Word", wordBoxVAX, BOX_Y - 20);
-        Label blockTitle = FieldBoxes.fieldTitle("Block", blockBoxPAX, BOX_Y - 20);
-        Label wordTitlePA = FieldBoxes.fieldTitle("Word", wordBoxPAX, BOX_Y - 20);
+        Label userTitle = FieldBoxes.fieldTitle("User", userBox, BOX_Y - 20);
+        Label pageTitle = FieldBoxes.fieldTitle("Page", pageBox, BOX_Y - 20);
+        Label wordTitleVA = FieldBoxes.fieldTitle("Word", wordBoxVA, BOX_Y - 20);
+        Label blockTitle = FieldBoxes.fieldTitle("Block", blockBoxPA, BOX_Y - 20);
+        Label wordTitlePA = FieldBoxes.fieldTitle("Word", wordBoxPA, BOX_Y - 20);
 
-        Label processHeader = FieldBoxes.sectionLabel("Process", userBoxX, 14);
-        Label vaHeader = FieldBoxes.sectionLabel("Virtual Address", pageBoxX, 14);
-        Label paHeader = FieldBoxes.sectionLabel("Physical Address", blockBoxPAX, 14);
+        Label processHeader = FieldBoxes.sectionLabel("Process", userBoxX, 20);
+        Label vaHeader = FieldBoxes.sectionLabel("Virtual Address", pageBoxX, 20);
+        Label paHeader = FieldBoxes.sectionLabel("Physical Address", 0, 20);
+        paHeader.layoutXProperty().bind(blockBoxPA.layoutXProperty());
 
         // ---- Tag formation geometry: user@page merge point ---------------------------------
         double userCenterX = userBoxX + userBoxW / 2.0;
@@ -224,11 +263,18 @@ public class PagedTLBTabView extends StackPane
         bodyNode.setOnMouseClicked(e ->
                 tlbInspector.toggle(bodyNode.getScene() != null ? bodyNode.getScene().getWindow() : null));
 
-        // The set-associative view carries its own per-way "Entry N" captions, and it sits high
-        // enough that a shared "TLB" caption would collide with the address boxes.
-        Label tableHeader = FieldBoxes.sectionLabel("TLB", tableX, tableY - 24);
-        tableHeader.getStyleClass().add("tlb-table-title");
-        tableHeader.setVisible(!setAssociative);
+        // Sits above the whole schematic table -- for set-associative that means above "Entry 0"'s
+        // own (much quieter) per-way caption, distinguishing this shared title from those.
+        Label tableHeader = FieldBoxes.sectionLabel("TLB", tableX, 0);
+        // Shares .table-title with PagedMMUTabView's "Page Table" title -- the schematic's own
+        // table-name caption, styled like .mmu-section-label but under its own name since it's
+        // specifically these two tables' titles, not every schematic-block heading.
+        tableHeader.getStyleClass().remove("mmu-section-label");
+        tableHeader.getStyleClass().add("table-title");
+        // Bound to the label's own measured height (not a guessed pixel offset), so its bottom edge
+        // always sits TABLE_TITLE_GAP above the table's top border regardless of font changes.
+        tableHeader.layoutYProperty().bind(Bindings.createDoubleBinding(
+                () -> tableY - tableHeader.getHeight() - TABLE_TITLE_GAP, tableHeader.heightProperty()));
 
         tagBrace.depthProperty().set(BRACE_DEPTH);
         tagBrace.leftYProperty().set(BRACE_EAR_Y);
@@ -246,14 +292,67 @@ public class PagedTLBTabView extends StackPane
         pageDown.endXProperty().bind(tagBrace.rightXProperty());
         pageDown.endYProperty().bind(tagBrace.rightYProperty().subtract(BRACE_GAP));
 
-        tagBitsLabel = bitLabel(viewModel.getTagBits(), 0, 0);
+        // ---- Associative / set-associative full-tag path: brace tip -> straight down -> across
+        // into the search bus. tagDown carries the tag's own bit-width tag + live hex value
+        // (mirrored either side of its midpoint, same as PagedMMUTabView's offsetToAdder); tagAcross
+        // is a plain passthrough leg into the search bus's own midpoint -- not a specific row -- which
+        // then fans out via its own arrowed per-row stubs (AssociativeTLBView), so it carries no
+        // arrow of its own; an arrow landing mid-bus would misread as pointing at one destination. ----
+        tagDown = bitWidthWire(viewModel.getTagBits());
+        tagDown.arrowTipVisibleProperty().set(false);
+        tagDown.labelOnLeftProperty().set(true);
+        tagDown.valueLabelVisibleProperty().set(true);
+        tagDown.getValueLabel().textProperty().bind(hideWhenInactive(viewModel.tagHexProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB)));
+
+        tagAcross = bitWidthWire(viewModel.getTagBits());
+        tagAcross.arrowTipVisibleProperty().set(false);
+        tagAcross.bitWidthIndicatorVisibleProperty().set(false);
+
+        // ---- Direct-mapped / set-associative fork: brace tip -> k@p stem -> fork bar -> tag leg
+        // (dead-ends in a hex readout coloured by the lookup outcome) + index leg (carries on into
+        // the selected row). kpDown carries its own bit-width tag + live value the same way tagDown
+        // does above; the tag leg keeps its "Nb" tag at its own true midpoint (self-labelling, as
+        // usual) but its live value is a separate manually-placed label below the wire's dead end
+        // (tagValueLabel) rather than BitWidthLine's own mirrored-at-midpoint value label. ----
+        kpDown = bitWidthWire(viewModel.getFullKeyBits());
+        kpDown.arrowTipVisibleProperty().set(false);
+        kpDown.valueLabelVisibleProperty().set(true);
+        kpDown.getValueLabel().textProperty().bind(hideWhenInactive(viewModel.fullTagHexProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB)));
+
+        tagStub = bitWidthWire(viewModel.getTagBits());
+        tagStub.arrowTipVisibleProperty().set(false);
+        tagStub.bitWidthIndicatorVisibleProperty().set(false);
+
+        tagLeg = bitWidthWire(viewModel.getTagBits());
+        tagLeg.arrowTipVisibleProperty().set(false);
+        tagLeg.labelOnLeftProperty().set(true);
+
+        tagValueLabel = new Label();
+        tagValueLabel.getStyleClass().add("mmu-bit-value");
         tagValueLabel.textProperty().bind(hideWhenInactive(viewModel.tagHexProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB)));
-        tagCaptionLabel = new Label("Tag");
-        tagCaptionLabel.getStyleClass().add("tlb-tag-caption");
-        kpBitsLabel = bitLabel(viewModel.getFullKeyBits(), 0, 0);
-        kpValueLabel.textProperty().bind(hideWhenInactive(viewModel.fullTagHexProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB)));
-        indexBitsLabel = bitLabel(viewModel.getIndexBits(), 0, 0);
-        indexValueLabel.textProperty().bind(hideWhenInactive(viewModel.indexValueProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB)));
+
+        indexStub = bitWidthWire(viewModel.getIndexBits());
+        indexStub.arrowTipVisibleProperty().set(false);
+        indexStub.bitWidthIndicatorVisibleProperty().set(false);
+
+        indexLeg = bitWidthWire(viewModel.getIndexBits());
+        indexLeg.arrowTipVisibleProperty().set(false);
+        // A one-slot direct-mapped TLB has no index bits -- a diagonal tick with no accompanying
+        // bit count would read oddly, so hide the whole indicator (tick + "0b" label together --
+        // BitWidthLine only exposes that toggle as one pair, unlike the tick-only hide the old
+        // hand-placed label allowed) rather than just the text.
+        indexLeg.bitWidthIndicatorVisibleProperty().set(viewModel.getIndexBits() > 0);
+
+        indexAcross = bitWidthWire(viewModel.getIndexBits());
+        // Direct-mapped: this leg lands on the one selected row itself, so the arrow reads as the
+        // address wire's actual terminus. Set-associative: it lands on the shared set-index bus's own
+        // midpoint (like tagAcross above), which then fans out via its own arrowed per-way taps -- so
+        // it carries no arrow here, same reasoning as tagAcross.
+        indexAcross.arrowTipVisibleProperty().set(!setAssociative);
+        indexAcross.bitWidthIndicatorVisibleProperty().set(false);
+        indexAcross.labelOnLeftProperty().set(true);
+        indexAcross.valueLabelVisibleProperty().set(true);
+        indexAcross.getValueLabel().textProperty().bind(hideWhenInactive(viewModel.indexValueProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB)));
 
         // Associative / set-associative: the whole user@page tag rides one line into the body view's
         // search-bus anchor. Direct-mapped: the key forks here -- the high k@p-m tag bits dead-end
@@ -261,34 +360,97 @@ public class PagedTLBTabView extends StackPane
         // selected row (the body view's address anchor tracks it).
         wireAddressIntoBody(split);
 
-        // ---- Word pass-through: VA Word flows straight across into PA Word -------------------
-        double passY = BOX_Y + BOX_HEIGHT + 40;
+        // ---- Word pass-through: VA Word flows straight across into PA Word, unchanged --------
+        // Right-angle elbow, each straight leg its own BitWidthLine (mirrors PagedMMUTabView's own
+        // wordDownVA/wordAcross/wordUpPA treatment exactly, including the property bindings that let
+        // it track wordBoxPA's own live-bound layoutX with no manual re-routing).
+        double passY = BOX_Y + ADDRESS_BOX_HEIGHT + 40;
         double wordVACenterX = wordBoxVAX + wordBoxW / 2;
-        double wordPACenterX = wordBoxPAX + wordBoxW / 2;
-        Polyline wordPassLine = elbow(
-                wordVACenterX, BOX_Y + BOX_HEIGHT,
-                wordVACenterX, passY,
-                wordPACenterX, passY,
-                wordPACenterX, BOX_Y + BOX_HEIGHT);
-        Label wordBitsStart = bitLabel(viewModel.getWordBits(), wordVACenterX + 6, passY - 18);
-        Label wordBitsEnd = bitLabel(viewModel.getWordBits(), wordPACenterX + 6, passY - 18);
+        var wordPACenterX = wordBoxPA.layoutXProperty().add(wordBoxW / 2.0);
+
+        BitWidthLine wordDownVA = bitWidthWire(viewModel.getWordBits());
+        wordDownVA.arrowTipVisibleProperty().set(false);
+        wordDownVA.startXProperty().set(wordVACenterX);
+        wordDownVA.startYProperty().set(BOX_Y + ADDRESS_BOX_HEIGHT);
+        wordDownVA.endXProperty().set(wordVACenterX);
+        wordDownVA.endYProperty().set(passY);
+
+        BitWidthLine wordAcross = bitWidthWire(viewModel.getWordBits());
+        wordAcross.arrowTipVisibleProperty().set(false);
+        wordAcross.bitWidthIndicatorVisibleProperty().set(false);
+        wordAcross.startXProperty().set(wordVACenterX);
+        wordAcross.startYProperty().set(passY);
+        wordAcross.endXProperty().bind(wordPACenterX);
+        wordAcross.endYProperty().set(passY);
+        // Flipped so the value label lands above the wire, matching blockAcross's own treatment
+        // (mirrors PagedMMUTabView's own wordAcross value label exactly).
+        wordAcross.labelOnLeftProperty().set(true);
+        Label wordFlowLabel = wordAcross.getValueLabel();
+        wordFlowLabel.textProperty().bind(hideWhenInactive(viewModel.wordHexProperty(), viewModel.lineActiveProperty(TlbLine.WORD_PASSTHROUGH)));
+        wordAcross.valueLabelVisibleProperty().set(true);
+
+        // Runs bottom-to-top (start at passY, end at the box) so its arrow lands pointing into the
+        // PA Word box, not away from it. Flipped labelOnLeft compensates so the tag still lands on
+        // the right, the same side wordDownVA's tag reads on.
+        BitWidthLine wordUpPA = bitWidthWire(viewModel.getWordBits());
+        wordUpPA.labelOnLeftProperty().set(true);
+        wordUpPA.startXProperty().bind(wordPACenterX);
+        wordUpPA.startYProperty().set(passY);
+        wordUpPA.endXProperty().bind(wordPACenterX);
+        wordUpPA.endYProperty().set(BOX_Y + ADDRESS_BOX_HEIGHT);
 
         // ---- Block output: always leaves the bottom of the table, into PA Block -------------
-        blockBitsLabel = bitLabel(viewModel.getFrameBits(), 0, 0);
-        blockValueLabel.textProperty().bind(hideWhenInactive(viewModel.blockHexProperty(), viewModel.lineActiveProperty(TlbLine.BLOCK_OUT)));
+        // Mutually exclusive with blockRiserFar/blockRiserNear below: updateConnectors() only ever
+        // routes one of the two sets per instance (never both), so whichever this TLB isn't is
+        // hidden here -- left visible (and so still sitting at its unrouted, un-positioned default
+        // geometry) is exactly how a stray "Nb" label ends up rendered at the canvas origin.
+        blockDown = bitWidthWire(viewModel.getFrameBits());
+        blockDown.setVisible(!setAssociative);
+        blockDown.arrowTipVisibleProperty().set(false);
+        blockDown.labelOnLeftProperty().set(true);
+
+        blockAcross = bitWidthWire(viewModel.getFrameBits());
+        blockAcross.setVisible(!setAssociative);
+        blockAcross.arrowTipVisibleProperty().set(false);
+        blockAcross.bitWidthIndicatorVisibleProperty().set(false);
+        blockAcross.labelOnLeftProperty().set(true);
+        blockAcross.valueLabelVisibleProperty().set(true);
+        blockAcross.getValueLabel().textProperty().bind(hideWhenInactive(viewModel.blockHexProperty(), viewModel.lineActiveProperty(TlbLine.BLOCK_OUT)));
+
+        blockUpFar = bitWidthWire(viewModel.getFrameBits());
+        blockUpFar.setVisible(!setAssociative);
+        blockUpFar.arrowTipVisibleProperty().set(false);
+        blockUpFar.bitWidthIndicatorVisibleProperty().set(false);
+
+        // Carries the rise's own bit-width tag. Flipped from the default (unlike blockDown) so the
+        // tag lands on the wire's right, matching wordUpPA's own tag on the Word wire beside it. Its
+        // own short, fixed span (set in updateConnectors) puts that tag at the same height as
+        // wordUpPA's own tag, mirroring PagedMMUTabView's blockUpNear treatment exactly.
+        blockUpNear = bitWidthWire(viewModel.getFrameBits());
+        blockUpNear.setVisible(!setAssociative);
+        blockUpNear.labelOnLeftProperty().set(true);
+
         // Set-associative draws its own per-way block lines + frame value inside the body view; the
-        // tab keeps blockOut/blockTick/blockBitsLabel as the riser from the body's output tap into
-        // PA Block, but not its own value readout.
-        if (setAssociative)
-            blockValueLabel.setVisible(false);
+        // tab routes the riser from the body's output tap into PA Block, with no value readout of
+        // its own. Split into far (no tag) + near (fixed short span) exactly like blockUpFar/
+        // blockUpNear above, so its own "Nb" tag lands at the same height as wordUpPA's, instead of
+        // at the true midpoint of the whole tap-to-box run (which varies with the number of ways).
+        blockRiserFar = bitWidthWire(viewModel.getFrameBits());
+        blockRiserFar.setVisible(setAssociative);
+        blockRiserFar.arrowTipVisibleProperty().set(false);
+        blockRiserFar.bitWidthIndicatorVisibleProperty().set(false);
+
+        blockRiserNear = bitWidthWire(viewModel.getFrameBits());
+        blockRiserNear.setVisible(setAssociative);
+        blockRiserNear.labelOnLeftProperty().set(true);
 
         canvas.getChildren().addAll(
                 processHeader, vaHeader, paHeader, tableHeader,
                 userTitle, pageTitle, wordTitleVA, blockTitle, wordTitlePA,
-                userDown, pageDown, tagBrace, tagLine, tagTick, tagBitsLabel, tagValueLabel, tagCaptionLabel,
-                kpStub, kpTick, kpBitsLabel, kpValueLabel, leftBranch, indexBranch, indexTick, indexBitsLabel, indexValueLabel,
-                wordPassLine, wordBitsStart, wordBitsEnd,
-                blockOut, blockTick, blockBitsLabel, blockValueLabel,
+                userDown, pageDown, tagBrace, tagDown, tagAcross,
+                kpDown, tagStub, tagLeg, tagValueLabel, indexStub, indexLeg, indexAcross,
+                wordDownVA, wordAcross, wordUpPA,
+                blockDown, blockAcross, blockUpFar, blockUpNear, blockRiserFar, blockRiserNear,
                 userBox, pageBox, wordBoxVA, blockBoxPA, wordBoxPA,
                 bodyNode);
 
@@ -313,7 +475,8 @@ public class PagedTLBTabView extends StackPane
         viewModel.resolvedWayProperty().addListener((o, ov, nv) -> reposition.run());
         // Several labels are positioned relative to their own measured width; re-route once the
         // layout pass has actually sized them (getWidth() is 0 on the first connector pass).
-        for (Label label : List.of(kpValueLabel, kpBitsLabel, tagValueLabel, tagBitsLabel, tagCaptionLabel, indexBitsLabel, indexValueLabel))
+        for (Label label : List.of(kpDown.getValueLabel(), kpDown.getBitsLabel(), tagValueLabel,
+                tagLeg.getBitsLabel(), indexLeg.getBitsLabel(), indexAcross.getValueLabel()))
             label.widthProperty().addListener((o, ov, nv) -> reposition.run());
         reposition.run();
 
@@ -322,17 +485,17 @@ public class PagedTLBTabView extends StackPane
         bindActive(userDown, viewModel.lineActiveProperty(TlbLine.USER_TO_TAG));
         bindActive(pageDown, viewModel.lineActiveProperty(TlbLine.PAGE_TO_TAG));
         bindActive(tagBrace, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
-        bindActive(tagLine, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
-        bindActive(tagTick, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
-        bindActive(tagBitsLabel, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
-        bindActive(tagValueLabel, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
-        bindActive(wordPassLine, viewModel.lineActiveProperty(TlbLine.WORD_PASSTHROUGH));
-        bindActive(wordBitsStart, viewModel.lineActiveProperty(TlbLine.WORD_PASSTHROUGH));
-        bindActive(wordBitsEnd, viewModel.lineActiveProperty(TlbLine.WORD_PASSTHROUGH));
-        bindActive(blockOut, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
-        bindActive(blockTick, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
-        bindActive(blockBitsLabel, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
-        bindActive(blockValueLabel, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
+        bindActive(tagDown, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
+        bindActive(tagAcross, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
+        bindActive(wordDownVA, viewModel.lineActiveProperty(TlbLine.WORD_PASSTHROUGH));
+        bindActive(wordAcross, viewModel.lineActiveProperty(TlbLine.WORD_PASSTHROUGH));
+        bindActive(wordUpPA, viewModel.lineActiveProperty(TlbLine.WORD_PASSTHROUGH));
+        bindActive(blockDown, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
+        bindActive(blockAcross, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
+        bindActive(blockUpFar, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
+        bindActive(blockUpNear, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
+        bindActive(blockRiserFar, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
+        bindActive(blockRiserNear, viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
         // Set-associative: each way-table draws its own block line; the body view lights the
         // resolved way's line + frame readout from this.
         if (setAssocBody != null) {
@@ -344,9 +507,13 @@ public class PagedTLBTabView extends StackPane
         }
 
         if (split) {
-            for (Node n : List.of(kpStub, kpTick, kpBitsLabel, kpValueLabel,
-                    leftBranch, tagCaptionLabel, indexBranch, indexTick, indexBitsLabel, indexValueLabel))
-                bindActive(n, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
+            // bindActive's BitWidthLine overload reaches into each wire's own wire/tick/label
+            // children (see that overload's own doc comment) -- looping over a plain Node list here
+            // would only toggle the outer Group's pseudo-class, leaving the children (and so the
+            // wire's rendered colour) stuck grey.
+            for (BitWidthLine line : List.of(kpDown, tagStub, tagLeg, indexStub, indexLeg, indexAcross))
+                bindActive(line, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
+            bindActive(tagValueLabel, viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
             bindOutcome(tagValueLabel, viewModel.lookupOutcomeProperty());
         }
 
@@ -359,6 +526,11 @@ public class PagedTLBTabView extends StackPane
 
         ScrollPane scrollPane = new ScrollPane(canvas);
         scrollPane.getStyleClass().addAll("mmu-scroll-pane", "slim-scroll");
+        // Grows canvas to fill the viewport's real width when it's wider than MIN_CANVAS_WIDTH (never
+        // narrower -- canvas's own minWidth floors it there, so content still scrolls horizontally
+        // below that), which is what lets Physical Address's live binding actually reach the tab's
+        // true right edge instead of a fixed pixel canvas size -- matches PagedMMUTabView's ScrollPane.
+        scrollPane.setFitToWidth(true);
         getChildren().add(scrollPane);
     }
 
@@ -370,24 +542,18 @@ public class PagedTLBTabView extends StackPane
         tagBrace.tipXProperty().addListener((o, ov, nv) -> updateConnectors());
         tagBrace.tipYProperty().addListener((o, ov, nv) -> updateConnectors());
 
-        // tagTick / tagBitsLabel / tagValueLabel are shared: on tagLine when fully-associative, on
-        // the fork's tag leg when direct-mapped / set-associative -- so only tagLine itself is
-        // hidden by the split.
-        tagLine.setVisible(!splitAddress);
-        tagCaptionLabel.setVisible(splitAddress);
-        kpStub.setVisible(splitAddress);
-        kpTick.setVisible(splitAddress);
-        kpBitsLabel.setVisible(splitAddress);
-        kpValueLabel.setVisible(splitAddress);
-        leftBranch.setVisible(splitAddress);
-        indexBranch.setVisible(splitAddress);
-        indexTick.setVisible(splitAddress);
-        // A one-slot direct-mapped TLB has no index bits -- keep the branch line, drop the "0b" tag.
-        indexBitsLabel.setVisible(splitAddress && viewModel.getIndexBits() > 0);
+        tagDown.setVisible(!splitAddress);
+        tagAcross.setVisible(!splitAddress);
+        kpDown.setVisible(splitAddress);
+        tagStub.setVisible(splitAddress);
+        tagLeg.setVisible(splitAddress);
+        tagValueLabel.setVisible(splitAddress);
+        indexStub.setVisible(splitAddress);
+        indexLeg.setVisible(splitAddress);
         // Fully-associative (non-split) never routes an index leg -- routeFullTagLine() never
-        // positions or activates this label, so without this it's stuck showing indexValueProperty()
+        // positions or activates indexAcross, so without this it's stuck showing indexValueProperty()
         // at its unpositioned (0,0) construction default in default (inactive/grey) styling.
-        indexValueLabel.setVisible(splitAddress);
+        indexAcross.setVisible(splitAddress);
     }
 
     private void updateConnectors()
@@ -414,7 +580,7 @@ public class PagedTLBTabView extends StackPane
         if (viewModel.isSetAssociative()) {
             // The body view draws one block line per way-table + its own readout, joined by a
             // vertical bus whose top is the output tap. The tab puts that bus directly under the
-            // PA Block box so blockOut is one straight riser from the tap into the box.
+            // PA Block box so the riser runs straight from the tap into the box.
             if (blockBoxPA.getScene() != null && bodyNode.getScene() != null) {
                 Bounds box = canvas.sceneToLocal(blockBoxPA.localToScene(blockBoxPA.getBoundsInLocal()));
                 // Bus + riser align to the bottom-middle of the PA Block box.
@@ -427,11 +593,25 @@ public class PagedTLBTabView extends StackPane
                     double riserX = t.getCenterX();
                     double tapY = t.getCenterY();
                     double intoY = box.getMaxY();
-                    blockOut.getPoints().setAll(riserX, tapY, riserX, intoY);
-                    positionTick(blockTick, riserX, (tapY + intoY) / 2);
-                    blockBitsLabel.setLayoutX(riserX + 8);
-                    blockBitsLabel.setLayoutY((tapY + intoY) / 2 - blockBitsLabel.getHeight() / 2);
-                    toFront(blockOut, blockTick, blockBitsLabel);
+
+                    // blockRiserNear's own span is 40 (matching wordUpPA's own box-to-passY span and
+                    // blockUpNear above), so its own midpoint -- where its tag lands -- sits the same
+                    // 20px below the box edge that wordUpPA's tag does, regardless of how far below
+                    // the tap itself sits (which grows with the number of ways stacked).
+                    double riserNearStartY = intoY + 40;
+
+                    blockRiserFar.startXProperty().set(riserX);
+                    blockRiserFar.startYProperty().set(tapY);
+                    blockRiserFar.endXProperty().set(riserX);
+                    blockRiserFar.endYProperty().set(riserNearStartY);
+
+                    blockRiserNear.startXProperty().set(riserX);
+                    blockRiserNear.startYProperty().set(riserNearStartY);
+                    blockRiserNear.endXProperty().set(riserX);
+                    blockRiserNear.endYProperty().set(intoY);
+
+                    blockRiserFar.toFront();
+                    blockRiserNear.toFront();
                 }
             }
             return;
@@ -452,32 +632,54 @@ public class PagedTLBTabView extends StackPane
             double dropY = tableBottomY + BLOCK_DROP;
             double boxX = box.getCenterX();
 
-            blockOut.getPoints().setAll(
-                    colX, tableBottomY,
-                    colX, dropY,
-                    boxX, dropY,
-                    boxX, box.getMaxY());
-            positionTick(blockTick, colX, tableBottomY + BLOCK_DROP / 2);
-            blockBitsLabel.setLayoutX(colX - blockBitsLabel.getWidth() - 10);
-            blockBitsLabel.setLayoutY(tableBottomY + BLOCK_DROP / 2 - blockBitsLabel.getHeight() / 2);
-            blockValueLabel.setLayoutX((colX + boxX) / 2 - blockValueLabel.getWidth() / 2);
-            blockValueLabel.setLayoutY(dropY - 20);
-            toFront(blockOut, blockTick, blockBitsLabel, blockValueLabel);
+            blockDown.startXProperty().set(colX);
+            blockDown.startYProperty().set(tableBottomY);
+            blockDown.endXProperty().set(colX);
+            blockDown.endYProperty().set(dropY);
+
+            blockAcross.startXProperty().set(colX);
+            blockAcross.startYProperty().set(dropY);
+            blockAcross.endXProperty().set(boxX);
+            blockAcross.endYProperty().set(dropY);
+
+            // blockUpNear's own span is 40 (matching wordUpPA's own box-to-passY span exactly -- see
+            // its own construction above), so its own midpoint -- where its tag lands -- sits the
+            // same 20px below the box edge that wordUpPA's tag does, reading as "the same height"
+            // even though the block wire's overall drop is much longer than the word wire's.
+            double blockUpNearStartY = box.getMaxY() + 40;
+
+            blockUpFar.startXProperty().set(boxX);
+            blockUpFar.startYProperty().set(dropY);
+            blockUpFar.endXProperty().set(boxX);
+            blockUpFar.endYProperty().set(blockUpNearStartY);
+
+            blockUpNear.startXProperty().set(boxX);
+            blockUpNear.startYProperty().set(blockUpNearStartY);
+            blockUpNear.endXProperty().set(boxX);
+            blockUpNear.endYProperty().set(box.getMaxY());
+
+            blockDown.toFront();
+            blockAcross.toFront();
+            blockUpFar.toFront();
+            blockUpNear.toFront();
         }
     }
 
     // Associative / set-associative: brace tip -> straight down at mergeX -> across to the search bus.
     private void routeFullTagLine(double busX, double busY, double tipY)
     {
-        tagLine.getPoints().setAll(mergeX, tipY, mergeX, busY, busX, busY);
-        double legMidY = (tipY + busY) / 2;
-        positionTick(tagTick, mergeX, legMidY);
-        // Labels sit to the LEFT of the vertical leg; the table hugs its right side.
-        tagBitsLabel.setLayoutX(mergeX - tagBitsLabel.getWidth() - 10);
-        tagBitsLabel.setLayoutY(legMidY - tagBitsLabel.getHeight() / 2);
-        tagValueLabel.setLayoutX(mergeX - tagValueLabel.getWidth() - 10);
-        tagValueLabel.setLayoutY(busY - 24);
-        toFront(tagLine, tagTick, tagBitsLabel, tagValueLabel);
+        tagDown.startXProperty().set(mergeX);
+        tagDown.startYProperty().set(tipY);
+        tagDown.endXProperty().set(mergeX);
+        tagDown.endYProperty().set(busY);
+
+        tagAcross.startXProperty().set(mergeX);
+        tagAcross.startYProperty().set(busY);
+        tagAcross.endXProperty().set(busX);
+        tagAcross.endYProperty().set(busY);
+
+        tagDown.toFront();
+        tagAcross.toFront();
     }
 
     // Direct-mapped fork: brace tip -> a long k@p stem -> a fork bar with two parallel legs. The
@@ -487,44 +689,49 @@ public class PagedTLBTabView extends StackPane
     {
         double stemX = mergeX;
         double forkY = tipY + KP_STEM_LEN;
-        double stemMidY = (tipY + forkY) / 2;
 
-        kpStub.getPoints().setAll(stemX, tipY, stemX, forkY);
-        positionTick(kpTick, stemX, stemMidY);
-        kpBitsLabel.setLayoutX(stemX + 10);
-        kpBitsLabel.setLayoutY(stemMidY - kpBitsLabel.getHeight() / 2);
-        kpValueLabel.setLayoutX(stemX - kpValueLabel.getWidth() - 10);
-        kpValueLabel.setLayoutY(stemMidY - kpValueLabel.getHeight() / 2);
+        kpDown.startXProperty().set(stemX);
+        kpDown.startYProperty().set(tipY);
+        kpDown.endXProperty().set(stemX);
+        kpDown.endYProperty().set(forkY);
 
         double tagLegX = stemX - FORK_HALF_WIDTH;
         double tagLegEndY = forkY + SPLIT_LEG_LEN;
-        double tagLegMidY = (forkY + tagLegEndY) / 2;
-        leftBranch.getPoints().setAll(stemX, forkY, tagLegX, forkY, tagLegX, tagLegEndY);
-        positionTick(tagTick, tagLegX, tagLegMidY);
-        tagBitsLabel.setLayoutX(tagLegX - tagBitsLabel.getWidth() - 8);
-        tagBitsLabel.setLayoutY(tagLegMidY - tagBitsLabel.getHeight() / 2);
-        tagValueLabel.setLayoutX(tagLegX - tagValueLabel.getWidth() / 2);
-        tagValueLabel.setLayoutY(tagLegEndY + 4);
-        // Labels the wire itself -- sat to the left of the tag leg (not the short horizontal jog off
-        // the stem, which is too narrow at FORK_HALF_WIDTH px to keep a bold label clear of the
-        // vertical k@p stem/tick beside it), clear of both the "Nb" bit-width tag and the readout below.
-        tagCaptionLabel.setLayoutX(tagLegX - tagCaptionLabel.getWidth() - 6);
-        tagCaptionLabel.setLayoutY(forkY - tagCaptionLabel.getHeight() - TAG_CAPTION_GAP);
+
+        tagStub.startXProperty().set(stemX);
+        tagStub.startYProperty().set(forkY);
+        tagStub.endXProperty().set(tagLegX);
+        tagStub.endYProperty().set(forkY);
+
+        tagLeg.startXProperty().set(tagLegX);
+        tagLeg.startYProperty().set(forkY);
+        tagLeg.endXProperty().set(tagLegX);
+        tagLeg.endYProperty().set(tagLegEndY);
+
+        // Live tag value sits below the leg's dead end, centred on it -- not mirrored at the tick's
+        // own midpoint (see tagLeg's own doc comment).
+        tagValueLabel.autosize();
+        tagValueLabel.setLayoutX(tagLegX - tagValueLabel.getWidth() / 2.0);
+        tagValueLabel.setLayoutY(tagLegEndY + TAG_VALUE_GAP);
 
         double idxLegX = stemX + FORK_HALF_WIDTH;
-        double idxLegMidY = (forkY + anchorY) / 2;
-        indexBranch.getPoints().setAll(stemX, forkY, idxLegX, forkY, idxLegX, anchorY, anchorX, anchorY);
-        positionTick(indexTick, idxLegX, idxLegMidY);
-        indexBitsLabel.setLayoutX(idxLegX + 8);
-        indexBitsLabel.setLayoutY(idxLegMidY - indexBitsLabel.getHeight());
-        // Rides the leg's final horizontal run into the table, centred over its span like the other
-        // flow labels (e.g. the block-output value above its own horizontal drop).
-        double indexRunMidX = (idxLegX + anchorX) / 2;
-        indexValueLabel.setLayoutX(indexRunMidX - indexValueLabel.getWidth() / 2);
-        indexValueLabel.setLayoutY(anchorY - indexValueLabel.getHeight() - 4);
 
-        toFront(kpStub, kpTick, kpBitsLabel, kpValueLabel, leftBranch, tagTick, tagBitsLabel,
-                tagValueLabel, tagCaptionLabel, indexBranch, indexTick, indexBitsLabel, indexValueLabel);
+        indexStub.startXProperty().set(stemX);
+        indexStub.startYProperty().set(forkY);
+        indexStub.endXProperty().set(idxLegX);
+        indexStub.endYProperty().set(forkY);
+
+        indexLeg.startXProperty().set(idxLegX);
+        indexLeg.startYProperty().set(forkY);
+        indexLeg.endXProperty().set(idxLegX);
+        indexLeg.endYProperty().set(anchorY);
+
+        indexAcross.startXProperty().set(idxLegX);
+        indexAcross.startYProperty().set(anchorY);
+        indexAcross.endXProperty().set(anchorX);
+        indexAcross.endYProperty().set(anchorY);
+
+        toFront(kpDown, tagStub, tagLeg, tagValueLabel, indexStub, indexLeg, indexAcross);
     }
 
     // Toggle the green/red hit-miss style classes on a node from the lookup outcome. Independent of
@@ -590,51 +797,16 @@ public class PagedTLBTabView extends StackPane
                 () -> box.getLayoutY() + box.getHeight(), box.layoutYProperty(), box.heightProperty()));
     }
 
+    // A straight signal wire that carries its own mid-span bit-width tag (diagonal tick + "Nb" label),
+    // replacing the old hand-placed line + tick + bitLabel trios. The tag rides on the wire's right
+    // side by default; callers flip labelOnLeftProperty() where the reference schematic reads
+    // differently.
     private static BitWidthLine bitWidthWire(int bits)
     {
         BitWidthLine wire = new BitWidthLine();
         wire.bitsProperty().set(bits);
         wire.labelOnLeftProperty().set(false);
         return wire;
-    }
-
-    private static Polyline elbow(double... points)
-    {
-        Polyline polyline = new Polyline(points);
-        polyline.setManaged(false);
-        polyline.getStyleClass().add("connector-line");
-        return polyline;
-    }
-
-    private static Line tick()
-    {
-        Line mark = new Line();
-        mark.setManaged(false);
-        mark.getStyleClass().add("connector-line");
-        return mark;
-    }
-
-    private static void positionTick(Line mark, double centerX, double centerY)
-    {
-        mark.setStartX(centerX - 6);
-        mark.setStartY(centerY + 6);
-        mark.setEndX(centerX + 6);
-        mark.setEndY(centerY - 6);
-    }
-
-    // Managed so the enclosing Pane autosizes it to its text; an unmanaged Label is never resized
-    // and renders at 0x0. (The decorative Polyline/Line shapes stay unmanaged -- they carry their
-    // own geometry and must not inflate the canvas bounds.)
-    private static Label flowLabel()
-    {
-        Label label = new Label();
-        label.getStyleClass().add("mmu-bit-value");
-        return label;
-    }
-
-    private static Label bitLabel(int bits, double x, double y)
-    {
-        return FieldBoxes.bitLabel(bits, x, y);
     }
 
     private static void toFront(Node... nodes)
@@ -658,12 +830,15 @@ public class PagedTLBTabView extends StackPane
         active.addListener((o, ov, nv) -> node.pseudoClassStateChanged(ACTIVE, nv));
     }
 
+    // Reaches into a BitWidthLine so its wire, arrow head, tick, bit-width label and value label all
+    // light up together -- matches PagedMMUTabView's own BitWidthLine overload.
     private void bindActive(BitWidthLine line, BooleanProperty active)
     {
         bindActive(line.getWire(), active);
         bindActive(line.getArrowHead(), active);
         bindActive(line.getTick(), active);
         bindActive(line.getBitsLabel(), active);
+        bindActive(line.getValueLabel(), active);
     }
 
     private void bindActive(BooleanProperty target, BooleanProperty source)

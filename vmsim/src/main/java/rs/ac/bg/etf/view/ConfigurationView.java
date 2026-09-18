@@ -6,11 +6,16 @@ import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.stage.Window;
 import javafx.util.StringConverter;
 import javafx.stage.FileChooser;
 import java.io.File;
+import java.util.function.Consumer;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TLBType;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TranslationType;
+import rs.ac.bg.etf.view.config.InstructionsEditorWindow;
+import rs.ac.bg.etf.view.config.MemoryInitEditorWindow;
+import rs.ac.bg.etf.view.config.PageTablesEditorWindow;
 import rs.ac.bg.etf.view.util.BackButton;
 import rs.ac.bg.etf.viewmodel.ConfigurationViewModel;
 
@@ -41,6 +46,13 @@ public class ConfigurationView {
         this.layoutContainer = new VBox();
         this.layoutContainer.getStyleClass().add("main-menu-container");
         this.layoutContainer.setAlignment(Pos.CENTER);
+
+        // Bulk-data sections (program instructions, initial page table, initial memory content)
+        // are too crowded to lay out inline, so each gets its own lazily-built editor window,
+        // opened/closed by a button living in whichever column that section belongs to below.
+        InstructionsEditorWindow instructionsEditorWindow = new InstructionsEditorWindow(viewModel.getInstructionEntries());
+        PageTablesEditorWindow pageTablesEditorWindow = new PageTablesEditorWindow(viewModel.getPageTableEntries());
+        MemoryInitEditorWindow memoryInitEditorWindow = new MemoryInitEditorWindow(viewModel.getMemoryInitEntries());
 
         // =========================================================================
         // 1. TOP HEADER SECTION
@@ -115,9 +127,16 @@ public class ConfigurationView {
         usersBox.getItems().addAll(1, 2, 4, 8, 16, 32);
         usersBox.valueProperty().bindBidirectional(usersAsObject);
         usersWrapper.getChildren().addAll(usersLabel, usersBox);
-        
 
-        generalColumn.getChildren().addAll(generalHeaderLabel, modelFieldWrapper, wordBitsWrapper, physBitsWrapper, addressableUnitWrapper, usersWrapper);
+        // The workload run against the configured hardware -- applies regardless of translation
+        // type or TLB structure, so it lives in the general column alongside the other options
+        // that aren't specific to either of the other two columns.
+        VBox instructionsWrapper = new VBox(5);
+        Label instructionsFieldLabel = new Label("Program");
+        Button instructionsButton = buildEditorButton("Instructions", instructionsEditorWindow::toggle);
+        instructionsWrapper.getChildren().addAll(instructionsFieldLabel, instructionsButton);
+
+        generalColumn.getChildren().addAll(generalHeaderLabel, modelFieldWrapper, wordBitsWrapper, physBitsWrapper, addressableUnitWrapper, usersWrapper, instructionsWrapper);
 
         // -------------------------------------------------------------------------
         // COLUMN B (MIDDLE): TLB CACHE OPTIONS
@@ -200,12 +219,29 @@ public class ConfigurationView {
         dynamicHeaderLabel.setText("Paging Options");
 
         // Paged track options input box
-        VBox pagedSubWrapper = new VBox(5);
+        VBox pagedSubWrapper = new VBox(10);
+
+        VBox pageBitsWrapper = new VBox(5);
         Label pageBitsLabel = new Label("Page Bits");
         TextField pageSizeField = new TextField();
         pageSizeField.textProperty().bindBidirectional(viewModel.pageBitsProperty(), new javafx.util.converter.NumberStringConverter());
-        pagedSubWrapper.getChildren().addAll(pageBitsLabel, pageSizeField);
-        
+        pageBitsWrapper.getChildren().addAll(pageBitsLabel, pageSizeField);
+
+        // Page table entries and initial memory content are both keyed by page number, so they
+        // only make sense once paging is selected -- kept in this sub-wrapper rather than the
+        // general column so they hide/show together with Page Bits above.
+        VBox pageTableEditorWrapper = new VBox(5);
+        Label pageTableFieldLabel = new Label("Page Table Entries");
+        Button pageTableButton = buildEditorButton("Page Tables", pageTablesEditorWindow::toggle);
+        pageTableEditorWrapper.getChildren().addAll(pageTableFieldLabel, pageTableButton);
+
+        VBox memoryInitEditorWrapper = new VBox(5);
+        Label memoryInitFieldLabel = new Label("Initial Memory Content");
+        Button memoryInitButton = buildEditorButton("Memory Content", memoryInitEditorWindow::toggle);
+        memoryInitEditorWrapper.getChildren().addAll(memoryInitFieldLabel, memoryInitButton);
+
+        pagedSubWrapper.getChildren().addAll(pageBitsWrapper, pageTableEditorWrapper, memoryInitEditorWrapper);
+
         pagedSubWrapper.visibleProperty().bind(viewModel.translationTypeProperty().isEqualTo(TranslationType.PAGED));
         pagedSubWrapper.managedProperty().bind(pagedSubWrapper.visibleProperty());
 
@@ -268,10 +304,11 @@ public class ConfigurationView {
         errorBanner.textProperty().bind(viewModel.validationErrorMessageProperty());
 
         Button launchBtn = new Button("Launch Engine ▶");
-        launchBtn.getStyleClass().add("button-primary"); 
+        launchBtn.getStyleClass().addAll("menu-button", "button-primary");
         launchBtn.setOnAction(e -> viewModel.validateAndLaunch());
 
         Button loadConfigBtn = new Button("📁 Load Config");
+        loadConfigBtn.getStyleClass().add("menu-button");
         loadConfigBtn.setOnAction(e -> {
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Select TOML Configuration File");
@@ -341,5 +378,13 @@ public class ConfigurationView {
      */
     public Parent getRootContainerNode() {
         return this.rootContainer;
+    }
+
+    /** Builds a button that opens/closes (see the editor windows' {@code toggle}) a bulk-data editor window. */
+    private Button buildEditorButton(String label, Consumer<Window> onOpen) {
+        Button button = new Button(label);
+        button.getStyleClass().add("config-section-button");
+        button.setOnAction(e -> onOpen.accept(layoutContainer.getScene().getWindow()));
+        return button;
     }
 }

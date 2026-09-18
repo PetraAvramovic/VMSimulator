@@ -21,15 +21,15 @@ public abstract class TLBRowView extends HBox
         super();
         this.setAlignment(Pos.CENTER_LEFT);
         this.getStyleClass().add("page-table-row");
-        
-        this.setPrefHeight(24.0);
-        this.setMinHeight(24.0);
-        this.setMaxHeight(24.0);
 
-        indexLabel = cell("", 60);
-        vLabel = cell("", 30);
-        dLabel = cell("", 30);
-        tagLabel = cell("", WidthCalculator.columnWidth("Tag", tagHexWidth));
+        // No fixed pixel height: the row sizes itself from font metrics + the CSS row padding (see
+        // light-theme.css's ".page-table-inline > .tlb-table-rows > .page-table-row"), the same way
+        // PageTableView's own rows do -- matches the MMU schematic's table exactly, including when
+        // the enlarged 19px font is applied.
+        indexLabel = cell("", WidthCalculator.LARGE_INDEX_COL_WIDTH);
+        vLabel = cell("", WidthCalculator.LARGE_BIT_COL_WIDTH);
+        dLabel = cell("", WidthCalculator.LARGE_BIT_COL_WIDTH);
+        tagLabel = cell("", WidthCalculator.columnWidth("Tag", tagHexWidth, WidthCalculator.LARGE_CELL_FONT_SIZE));
 
         indexLabel.visibleProperty().bind(showIndex);
         indexLabel.managedProperty().bind(showIndex);
@@ -51,6 +51,9 @@ public abstract class TLBRowView extends HBox
         this.vLabel.setText(vText);
         this.dLabel.setText(dText);
         this.tagLabel.setText(tagText);
+        // A header row isn't a body row -- drop "page-table-row" so its lighter grey underline
+        // and padding don't fight .page-table-header's own (darker, differently padded) styling.
+        getStyleClass().remove("page-table-row");
         getStyleClass().add("page-table-header");
     }
 

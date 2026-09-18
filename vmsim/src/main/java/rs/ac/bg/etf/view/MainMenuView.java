@@ -24,7 +24,7 @@ public class MainMenuView {
 
         // 3. Resume Button Widget (only shown once a simulation exists to return to)
         Button resumeBtn = new Button("Resume");
-        resumeBtn.getStyleClass().add("button-primary"); // Blue button accent rule!
+        resumeBtn.getStyleClass().addAll("menu-button", "button-primary"); // Blue button accent rule!
         resumeBtn.setOnAction(e -> viewModel.executeResumeNavigation());
         resumeBtn.visibleProperty().bind(viewModel.resumeAvailableProperty());
         resumeBtn.managedProperty().bind(resumeBtn.visibleProperty());
@@ -32,6 +32,7 @@ public class MainMenuView {
         // 4. New Simulation Button Widget: carries the primary accent only while Resume is hidden,
         //    so exactly one action is highlighted at a time.
         Button startBtn = new Button("New Simulation");
+        startBtn.getStyleClass().add("menu-button");
         startBtn.setOnAction(e -> viewModel.executeStartNavigation());
         Runnable syncStartAccent = () -> {
             startBtn.getStyleClass().remove("button-primary");
@@ -44,6 +45,7 @@ public class MainMenuView {
 
         // 5. Settings Button Widget (Standard Neutral Styling)
         Button settingsBtn = new Button("Settings");
+        settingsBtn.getStyleClass().add("menu-button");
         settingsBtn.setOnAction(e -> viewModel.executeSettingsRequest());
 
         // Mount all layout nodes seamlessly onto your panel viewport container

@@ -4,6 +4,7 @@ import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
@@ -22,6 +23,7 @@ import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import rs.ac.bg.etf.model.memory.Instruction;
@@ -30,6 +32,7 @@ import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.view.tlb.PagedTLBTabView;
 import rs.ac.bg.etf.view.util.BackButton;
 import rs.ac.bg.etf.view.util.StepDescriptionFormatter;
+import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.MemoryTabViewModel;
 import rs.ac.bg.etf.viewmodel.PagedMMUTabViewModel;
@@ -44,6 +47,20 @@ public class SimulationView {
     // Logical drag limits so a sidebar can never swallow the whole workbench or collapse to nothing
     private static final double SIDEBAR_MIN_WIDTH = 200;
     private static final double SIDEBAR_MAX_WIDTH = 420;
+    // The instruction list's Index column has no configured upper bound (an instruction file can be
+    // any length), so its width is reserved for this many digits rather than measured from the
+    // actual (possibly much shorter) instruction list -- otherwise a short test file sizes the
+    // header/columns too narrow for whatever longer file replaces it later.
+    private static final int MAX_INDEX_DIGITS = 4;
+    // Extra breathing room below the step description, on top of the right sidebar's own uniform
+    // child spacing -- see buildRightSidebar.
+    private static final double STEP_DESC_GAP = 16;
+    // Fixed reserve for the step description -- enough for 3 wrapped lines at its own font size, so
+    // the nav rows below it sit at one constant position regardless of how long the current step's
+    // description is or how many lines it wraps to. A description that somehow needs more than
+    // that (an extreme case: the sidebar dragged to its narrowest plus an unusually long message)
+    // is clipped rather than pushing the buttons around -- see buildRightSidebar.
+    private static final double STEP_DESC_HEIGHT = 60;
 
     private final SplitPane layoutContainer;
 
@@ -51,10 +68,6 @@ public class SimulationView {
         VBox leftSidebar = buildLeftSidebar(viewModel);
         TabPane tabPane = buildTabPane(viewModel);
         VBox rightSidebar = buildRightSidebar(viewModel);
-
-        clampSidebarWidth(rightSidebar);
-        // leftSidebar clamps its own width in buildLeftSidebar() -- it has to fold in the
-        // instruction list's real content width, which the fixed clamp below knows nothing about.
 
         this.layoutContainer = new SplitPane(leftSidebar, tabPane, rightSidebar);
         this.layoutContainer.getStyleClass().add("simulation-container");
@@ -65,9 +78,38 @@ public class SimulationView {
         return BackButton.create(viewModel::navigateBack);
     }
 
-    private void clampSidebarWidth(VBox sidebar) {
-        sidebar.setMinWidth(SIDEBAR_MIN_WIDTH);
-        sidebar.setMaxWidth(SIDEBAR_MAX_WIDTH);
+    // Makes a pair of nav buttons split their row evenly and fill its full width, so the row's
+    // right edge lines up with the rest of the sidebar's content (e.g. the log list), while never
+    // letting either shrink narrower than its own text needs (no ellipsis).
+    //
+    // The shared floor comes from each button's own real, CSS-styled width the first time it's
+    // actually laid out -- captured once into a plain double, not a *live* binding back onto
+    // width itself. A live "minWidth = max(a.width, b.width)" binding is a feedback loop: turning
+    // on hgrow lets width grow to fill spare row space, which raises the bound minWidth to match,
+    // which then stops width from ever coming back down again even once the row is squeezed --
+    // that's what sent "Next ▶" off-screen instead of shrinking. hgrow/maxWidth (which let the
+    // pair grow to fill, or shrink back down to the floor) are only switched on *after* this
+    // one-time measurement, so that first measurement reflects each button's true unstretched
+    // size, not whatever the row happened to have room for yet.
+    private static void matchWidth(Button a, Button b) {
+        ChangeListener<Number> onFirstLayout = new ChangeListener<>() {
+            @Override
+            public void changed(ObservableValue<? extends Number> obs, Number ov, Number nv) {
+                if (a.getWidth() <= 0 || b.getWidth() <= 0)
+                    return; // wait until both have actually been laid out at least once
+                double floor = Math.max(a.getWidth(), b.getWidth());
+                a.setMinWidth(floor);
+                b.setMinWidth(floor);
+                a.setMaxWidth(Double.MAX_VALUE);
+                b.setMaxWidth(Double.MAX_VALUE);
+                HBox.setHgrow(a, Priority.ALWAYS);
+                HBox.setHgrow(b, Priority.ALWAYS);
+                a.widthProperty().removeListener(this);
+                b.widthProperty().removeListener(this);
+            }
+        };
+        a.widthProperty().addListener(onFirstLayout);
+        b.widthProperty().addListener(onFirstLayout);
     }
 
     // -------------------------------------------------------------------------
@@ -79,15 +121,24 @@ public class SimulationView {
         // overriding it with a fixed clampSidebarWidth() call -- gives a sidebar that is always
         // at least as wide as its real, CSS-styled content actually needs on this machine, with
         // no hand-tuned pixel constant standing in for that measurement.
+        //
+        // computePrefWidth, not computeMinWidth: the instruction list's header cells only pin
+        // prefWidth (see instructionCell), so their own computeMinWidth stays at a Label's usual
+        // shrink-to-ellipsis default -- far narrower than the columns actually need. That default
+        // is also all a VBox has to report once the instruction list is empty (the scrollable
+        // "rows" VBox collapses to zero width with no rows in it), so basing the sidebar's floor
+        // on computeMinWidth let the SplitPane squeeze it well below the header's real width,
+        // squishing the column labels together. computePrefWidth reflects the header's actual
+        // fixed-width columns regardless of how many rows are loaded.
         VBox leftSidebar = new VBox(12) {
             @Override
             protected double computeMinWidth(double height) {
-                return Math.max(SIDEBAR_MIN_WIDTH, super.computeMinWidth(height));
+                return Math.max(SIDEBAR_MIN_WIDTH, super.computePrefWidth(height));
             }
 
             @Override
             protected double computeMaxWidth(double height) {
-                return Math.max(SIDEBAR_MAX_WIDTH, super.computeMinWidth(height));
+                return Math.max(SIDEBAR_MAX_WIDTH, super.computePrefWidth(height));
             }
         };
         leftSidebar.getStyleClass().add("sidebar-panel");
@@ -99,14 +150,16 @@ public class SimulationView {
 
         Region instructionList = buildInstructionList(viewModel);
 
-        Label currentVaHeader = new Label("Current VA");
+        Label currentVaHeader = new Label("Virtual Address");
         currentVaHeader.getStyleClass().add("column-header");
         Label currentVaLabel = new Label();
+        currentVaLabel.getStyleClass().add("sidebar-value-label");
         currentVaLabel.textProperty().bind(viewModel.currentVirtualAddressHexProperty());
 
-        Label currentPaHeader = new Label("Current PA");
+        Label currentPaHeader = new Label("Physical Address");
         currentPaHeader.getStyleClass().add("column-header");
         Label currentPaLabel = new Label();
+        currentPaLabel.getStyleClass().add("sidebar-value-label");
         currentPaLabel.textProperty().bind(viewModel.currentPhysicalAddressHexProperty());
 
         leftSidebar.getChildren().addAll(
@@ -129,15 +182,15 @@ public class SimulationView {
         ObservableList<Instruction> instructions = viewModel.getInstructionEntries();
         int rowCount = instructions.size();
 
-        // Column widths come from the actual instructions (widest index/user/address), the same
-        // way FrameTableView sizes its own hex columns -- never a hardcoded pixel guess.
-        int indexDigits = Integer.toString(Math.max(0, rowCount - 1)).length();
-        int userDigits = 1;
-        int vaHexDigits = 1;
-        for (Instruction instruction : instructions) {
-            userDigits = Math.max(userDigits, Integer.toString(instruction.getUser()).length());
-            vaHexDigits = Math.max(vaHexDigits, Long.toHexString(instruction.getVirtualAddress()).length());
-        }
+        // Every column is sized from the configuration's own worst case, never from whatever values
+        // the current instruction file happens to contain -- so the header/columns are never left
+        // too narrow for a longer file or a run that simply doesn't happen to use every user id.
+        // Index has no configured bound at all (see MAX_INDEX_DIGITS); User comes from the
+        // configured user count's highest possible id; VA already came from the configured
+        // virtual-address bit width.
+        int indexDigits = MAX_INDEX_DIGITS;
+        int userDigits = Integer.toString(Math.max(0, viewModel.getContext().getNumberOfUsers() - 1)).length();
+        int vaHexDigits = ValueConverter.hexDigitsFor(viewModel.getContext().getFullVirtualAddressBits());
         double indexWidth = WidthCalculator.plainColumnWidth("Index", indexDigits);
         double opWidth = WidthCalculator.plainColumnWidth("Op", 2);
         double userWidth = WidthCalculator.plainColumnWidth("User", userDigits);
@@ -151,7 +204,7 @@ public class SimulationView {
                     instructionCell(Integer.toString(i), indexWidth),
                     instructionCell(instruction.getAccessType().toString(), opWidth),
                     instructionCell(Integer.toString(instruction.getUser()), userWidth),
-                    instructionCell(String.format("0x%X", instruction.getVirtualAddress()), vaWidth));
+                    instructionCell(ValueConverter.toHex(instruction.getVirtualAddress(), vaHexDigits), vaWidth));
             row.getStyleClass().add("instruction-list-row");
             // Clicking an instruction jumps the simulation to right after its fetch step, whether
             // that means reverting back to it or running forward to reach it.
@@ -331,7 +384,21 @@ public class SimulationView {
     // RIGHT SIDEBAR: Execution log, step description, step counter, navigation
     // -------------------------------------------------------------------------
     private VBox buildRightSidebar(SimulationViewModel viewModel) {
-        VBox rightSidebar = new VBox(12);
+        // Same computePrefWidth-derived floor/ceiling buildLeftSidebar uses (see its own comment):
+        // the widest real content here is the nav-button rows below, so this keeps the panel (and
+        // so the SplitPane divider) from ever landing narrower than what "◀ Previous"/"Next ▶"
+        // actually need -- no hand-picked pixel constant standing in for that measurement.
+        VBox rightSidebar = new VBox(12) {
+            @Override
+            protected double computeMinWidth(double height) {
+                return Math.max(SIDEBAR_MIN_WIDTH, super.computePrefWidth(height));
+            }
+
+            @Override
+            protected double computeMaxWidth(double height) {
+                return Math.max(SIDEBAR_MAX_WIDTH, super.computePrefWidth(height));
+            }
+        };
         rightSidebar.getStyleClass().add("sidebar-panel");
 
         Label logHeader = new Label("Execution Log");
@@ -383,18 +450,54 @@ public class SimulationView {
                 viewModel.currentStepDescriptionProperty(),
                 viewModel.fallbackMessageProperty()));
         stepDescLabel.getStyleClass().add("sidebar-info-label");
+        stepDescLabel.setWrapText(true);
+        // A wrapping Label's own *preferred* width is still its full unwrapped single-line text --
+        // wrapping only kicks in once something else constrains it narrower than that. Left alone,
+        // this one-sentence status message (e.g. "Simulation ready. Press \"Next\" to begin
+        // stepping through execution.") would report a many-hundred-pixel preferred width and,
+        // being the widest child, dictate the whole sidebar's width now that it's sized from real
+        // content (see buildRightSidebar). Pinning prefWidth to a small sentinel takes it out of
+        // that computation entirely; maxWidth staying at Double.MAX_VALUE still lets the VBox's
+        // own fillWidth stretch it to whatever the sidebar's *other* content (the nav rows) ends
+        // up needing, which is exactly where it should wrap.
+        stepDescLabel.setPrefWidth(1);
+        stepDescLabel.setMaxWidth(Double.MAX_VALUE);
+        // Pinned to one constant height (min = pref = max), so the nav rows below sit at a fixed
+        // position no matter how long the current description is or how many lines it wraps to --
+        // not derived from the text at all, unlike a "grows to fit, never shrinks" floor, which
+        // still moves the buttons down the first time a longer message arrives. The trade-off: a
+        // description that needs more than STEP_DESC_HEIGHT's ~3 lines (only plausible with the
+        // sidebar dragged to its narrowest plus an unusually long message) is clipped rather than
+        // shown in full -- the clip below makes that a clean cut instead of visibly overlapping
+        // whatever sits underneath.
+        stepDescLabel.setMinHeight(STEP_DESC_HEIGHT);
+        stepDescLabel.setPrefHeight(STEP_DESC_HEIGHT);
+        stepDescLabel.setMaxHeight(STEP_DESC_HEIGHT);
+        javafx.scene.shape.Rectangle stepDescClip = new javafx.scene.shape.Rectangle();
+        stepDescClip.widthProperty().bind(stepDescLabel.widthProperty());
+        stepDescClip.setHeight(STEP_DESC_HEIGHT);
+        stepDescLabel.setClip(stepDescClip);
+
+        // A fixed spacer, not just the VBox's own uniform spacing -- purely for visual breathing
+        // room between the description and the nav rows below (see the height floor above for what
+        // actually stops them moving).
+        Region stepDescGap = new Region();
+        stepDescGap.setMinHeight(STEP_DESC_GAP);
 
         Label stepCounterLabel = new Label();
         stepCounterLabel.getStyleClass().add("step-counter-label");
         stepCounterLabel.textProperty().bind(viewModel.currentStepNumberProperty().asString("Step: %d"));
 
         Button prevBtn = new Button("◀ Previous");
+        prevBtn.getStyleClass().add("button-primary");
         prevBtn.setOnAction(e -> viewModel.executePreviousStep());
 
         Button nextBtn = new Button("Next ▶");
+        nextBtn.getStyleClass().add("button-primary");
         nextBtn.setOnAction(e -> viewModel.executeNextStep());
 
         HBox navBox = new HBox(10, prevBtn, nextBtn);
+        matchWidth(prevBtn, nextBtn);
 
         Label instructionCounterLabel = new Label();
         instructionCounterLabel.getStyleClass().add("step-counter-label");
@@ -408,15 +511,18 @@ public class SimulationView {
                 viewModel.currentInstructionIndexProperty()));
 
         Button instructionStartBtn = new Button("◀ Previous");
+        instructionStartBtn.getStyleClass().add("button-primary");
         instructionStartBtn.setOnAction(e -> viewModel.revertToInstructionStart());
 
         Button nextInstructionBtn = new Button("Next ▶");
+        nextInstructionBtn.getStyleClass().add("button-primary");
         nextInstructionBtn.setOnAction(e -> viewModel.executeNextInstruction());
 
         HBox instructionNavBox = new HBox(10, instructionStartBtn, nextInstructionBtn);
+        matchWidth(instructionStartBtn, nextInstructionBtn);
 
         rightSidebar.getChildren().addAll(
-                logHeader, logListView, stepDescHeader, stepDescLabel, stepCounterLabel, navBox,
+                logHeader, logListView, stepDescHeader, stepDescLabel, stepDescGap, stepCounterLabel, navBox,
                 instructionCounterLabel, instructionNavBox);
         return rightSidebar;
     }

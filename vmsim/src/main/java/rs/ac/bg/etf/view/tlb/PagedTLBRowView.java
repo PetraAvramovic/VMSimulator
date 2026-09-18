@@ -19,7 +19,7 @@ public class PagedTLBRowView extends TLBRowView
     {
         super(tagHexWidth);
 
-        blockLabel = cell("", WidthCalculator.columnWidth("Block", blockHexWidth));
+        blockLabel = cell("", WidthCalculator.columnWidth("Block", blockHexWidth, WidthCalculator.LARGE_CELL_FONT_SIZE));
         getChildren().add(blockLabel);
         blockCellAnchor.set(blockLabel);
     }

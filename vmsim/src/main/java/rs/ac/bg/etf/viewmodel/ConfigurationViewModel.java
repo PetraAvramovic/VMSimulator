@@ -1,14 +1,25 @@
 package rs.ac.bg.etf.viewmodel;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.TreeMap;
+
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TranslationType;
 import rs.ac.bg.etf.model.simulation.exceptions.InvalidConfig;
 import rs.ac.bg.etf.model.simulation.SimulationConfig;
+import rs.ac.bg.etf.model.simulation.SimulationConfig.InitialPage;
+import rs.ac.bg.etf.model.simulation.SimulationConfig.PageTableDescriptorInit;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TLBType;
 import rs.ac.bg.etf.viewmodel.listeners.ConfigurationNavigationListener;
 
@@ -36,6 +47,14 @@ public class ConfigurationViewModel
     private final IntegerProperty users = new SimpleIntegerProperty(2);
 
     private final StringProperty validationErrorMessage = new SimpleStringProperty("");
+
+    // Bulk-data sections edited through their own windows (InstructionsEditorWindow,
+    // PageTablesEditorWindow, MemoryInitEditorWindow) rather than inline on the config screen --
+    // these back SimulationConfig's instructions/pageTables/initialPages, which validateAndLaunch()
+    // flattens/regroups into on launch (see the loops there for the reverse of this flattening).
+    private final ObservableList<InstructionEntry> instructionEntries = FXCollections.observableArrayList();
+    private final ObservableList<PageTableEntry> pageTableEntries = FXCollections.observableArrayList();
+    private final ObservableList<MemoryInitEntry> memoryInitEntries = FXCollections.observableArrayList();
 
     public ConfigurationViewModel(ConfigurationNavigationListener navigationListener) 
     {
@@ -91,9 +110,43 @@ public class ConfigurationViewModel
             }
         }
 
+        // The Instructions/Page Table/Initial Memory Content editor windows are the single source
+        // of truth for these three sections regardless of whether config came from a loaded file
+        // or was built fresh above -- re-flatten them into the shapes SimulationConfig expects.
+        ArrayList<Instruction> instructionList = new ArrayList<>();
+        for (InstructionEntry entry : instructionEntries)
+            instructionList.add(entry.toInstruction());
+        config.setInstructions(instructionList);
+
+        Map<Integer, Map<Long, PageTableDescriptorInit>> pageTables = new HashMap<>();
+        for (PageTableEntry entry : pageTableEntries) {
+            pageTables
+                .computeIfAbsent(entry.userIdProperty().get(), userId -> new HashMap<>())
+                .put(entry.pageProperty().get(), new PageTableDescriptorInit(
+                    entry.validProperty().get(), entry.dirtyProperty().get(), entry.blockProperty().get()));
+        }
+        config.setPageTables(pageTables);
+
+        // Group flat (userId, page, offset, value) rows back into one InitialPage per
+        // (userId, page), each carrying a content map of its offset/value rows.
+        Map<Integer, Map<Long, TreeMap<Long, Long>>> contentByUserAndPage = new LinkedHashMap<>();
+        for (MemoryInitEntry entry : memoryInitEntries) {
+            contentByUserAndPage
+                .computeIfAbsent(entry.userIdProperty().get(), userId -> new LinkedHashMap<>())
+                .computeIfAbsent(entry.pageProperty().get(), page -> new TreeMap<>())
+                .put(entry.offsetProperty().get(), entry.valueProperty().get());
+        }
+        ArrayList<InitialPage> initialPages = new ArrayList<>();
+        for (Map.Entry<Integer, Map<Long, TreeMap<Long, Long>>> userEntry : contentByUserAndPage.entrySet()) {
+            for (Map.Entry<Long, TreeMap<Long, Long>> pageEntry : userEntry.getValue().entrySet()) {
+                initialPages.add(new InitialPage(userEntry.getKey(), pageEntry.getKey(), pageEntry.getValue()));
+            }
+        }
+        config.setInitialPages(initialPages);
+
         try {
             // Trigger your model's native validation method (e.g., throws IllegalArgumentException)
-            config.validate(); 
+            config.validate();
 
             // If it passes validation without throwing an exception, fire the session launch signal!
             if (navigationListener != null) {
@@ -157,6 +210,43 @@ public class ConfigurationViewModel
             pageBitsProperty().set(config.getPageBits());
         if (config.getSegmentBits() > 0)
             segmentBitsProperty().set(config.getSegmentBits());
+
+        instructionEntries.clear();
+        if (config.getInstructions() != null) {
+            for (Instruction instruction : config.getInstructions())
+                instructionEntries.add(new InstructionEntry(instruction));
+        }
+
+        pageTableEntries.clear();
+        if (config.getPageTables() != null) {
+            for (Map.Entry<Integer, Map<Long, PageTableDescriptorInit>> userEntry : config.getPageTables().entrySet()) {
+                for (Map.Entry<Long, PageTableDescriptorInit> pageEntry : userEntry.getValue().entrySet()) {
+                    PageTableEntry row = new PageTableEntry();
+                    row.userIdProperty().set(userEntry.getKey());
+                    row.pageProperty().set(pageEntry.getKey());
+                    row.validProperty().set(pageEntry.getValue().valid());
+                    row.dirtyProperty().set(pageEntry.getValue().dirty());
+                    row.blockProperty().set(pageEntry.getValue().block());
+                    pageTableEntries.add(row);
+                }
+            }
+        }
+
+        memoryInitEntries.clear();
+        if (config.getInitialPages() != null) {
+            for (InitialPage page : config.getInitialPages()) {
+                if (page.content() == null)
+                    continue;
+                for (Map.Entry<Long, Long> contentEntry : page.content().entrySet()) {
+                    MemoryInitEntry row = new MemoryInitEntry();
+                    row.userIdProperty().set(page.userId());
+                    row.pageProperty().set(page.page());
+                    row.offsetProperty().set(contentEntry.getKey());
+                    row.valueProperty().set(contentEntry.getValue());
+                    memoryInitEntries.add(row);
+                }
+            }
+        }
     }
 
     /**
@@ -178,5 +268,9 @@ public class ConfigurationViewModel
     public IntegerProperty addressableUnitProperty() { return addressableUnit; }
     public IntegerProperty usersProperty() { return users; }
     public StringProperty validationErrorMessageProperty() { return validationErrorMessage; }
+
+    public ObservableList<InstructionEntry> getInstructionEntries() { return instructionEntries; }
+    public ObservableList<PageTableEntry> getPageTableEntries() { return pageTableEntries; }
+    public ObservableList<MemoryInitEntry> getMemoryInitEntries() { return memoryInitEntries; }
 
 }

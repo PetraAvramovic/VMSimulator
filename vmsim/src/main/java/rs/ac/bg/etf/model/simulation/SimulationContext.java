@@ -93,9 +93,20 @@ public abstract class SimulationContext
         return config.getWordBits();
     }
 
+    // Despite the name, this is only the page/index component (the full virtual address minus its
+    // word-offset bits) -- the width TLB/page-table address components are built from. See
+    // getFullVirtualAddressBits() for the complete virtual address width instructions are given in.
     public int getVirtualAddressBits()
     {
         return config.getVirtualMemoryBits() - config.getWordBits();
+    }
+
+    /** Full virtual address width (page/index component + word offset), e.g. for padding a raw
+     *  instruction address's hex display -- unlike getVirtualAddressBits(), which excludes the word
+     *  offset. */
+    public int getFullVirtualAddressBits()
+    {
+        return config.getVirtualMemoryBits();
     }
 
     public int getAddressableUnit()

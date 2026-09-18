@@ -1,6 +1,6 @@
 target/
 .vscode/
-config/
+/config/
 
 PLAN.md
 CLAUDE.md

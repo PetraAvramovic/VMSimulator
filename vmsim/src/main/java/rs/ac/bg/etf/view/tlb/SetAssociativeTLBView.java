@@ -23,6 +23,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.shape.Line;
 import javafx.scene.shape.Polyline;
 
+import rs.ac.bg.etf.view.shape.BitWidthLine;
+
 /**
  * Set-associative TLB body view: one windowed table per way ("Entry 0", "Entry 1", ...), each
  * behaving like {@link DirectTLBView} -- rows indexed by set number, recentred on the addressed
@@ -39,7 +41,9 @@ import javafx.scene.shape.Polyline;
 public class SetAssociativeTLBView extends StackPane implements TLBBodyView
 {
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
-    private static final double BUS_STUB_LENGTH = 18.0;
+    // Matches AssociativeTLBView's own BUS_STUB_LENGTH so both TLB families' address taps read as
+    // the same length wire.
+    private static final double BUS_STUB_LENGTH = 32.0;
     private static final double WAY_GAP = 12.0;
     private static final double CAPTION_GAP = 4.0;
     // How far a way-table's block line drops below its bottom border before turning right, and the
@@ -53,7 +57,8 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
     private final List<List<PagedTLBRowView>> wayRows;
     private final List<VBox> tableBoxes = new ArrayList<>();
     private final List<VBox> rowBodies = new ArrayList<>();
-    private final List<Line> taps = new ArrayList<>();
+    // One arrowed wire per way, from the shared vertical bus into that way-table's addressed row.
+    private final List<BitWidthLine> taps = new ArrayList<>();
     // One block-output line per way-table, always drawn; the resolved way's goes :active (blue).
     // Every line has its own diagonal tick + "Nb" width label. blockJoin is the always-grey bus
     // bridging all their right ends; blockBusLive is the blue overlay from the resolved way's line
@@ -90,16 +95,19 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
             caption.getStyleClass().add("tlb-table-title");
 
             VBox rowsBody = new VBox();
+            rowsBody.getStyleClass().add("tlb-table-rows");
             rowsBody.getChildren().addAll(wayRows.get(w));
 
             VBox tableBox = new VBox();
-            tableBox.getStyleClass().add("tlb-table");
+            // "page-table-inline" scales it up to read as the same size as the MMU tab's own
+            // PageTableView (see light-theme.css).
+            tableBox.getStyleClass().addAll("tlb-table", "page-table-inline");
             tableBox.getChildren().addAll(headers.get(w), rowsBody);
 
             stack.getChildren().add(new VBox(CAPTION_GAP, caption, tableBox));
             tableBoxes.add(tableBox);
             rowBodies.add(rowsBody);
-            taps.add(searchLine());
+            taps.add(tapWire());
             blockLines.add(connectorPolyline());
             blockTicks.add(connectorLine());
             Label bits = flowLabel("mmu-bit-width");
@@ -143,8 +151,8 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
 
         active.addListener((o, ov, nv) -> {
             busLine.pseudoClassStateChanged(ACTIVE, nv);
-            for (Line tap : taps)
-                tap.pseudoClassStateChanged(ACTIVE, nv);
+            for (BitWidthLine tap : taps)
+                setTapActive(tap, nv);
             for (VBox body : rowBodies)
                 setFogged(body, !nv);
             reposition.run();
@@ -221,7 +229,7 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
             blockAnchor.setVisible(false);
             blockJoin.setVisible(false);
             blockBusLive.setVisible(false);
-            for (Line tap : taps)
+            for (BitWidthLine tap : taps)
                 tap.setVisible(false);
             for (Polyline bl : blockLines)
                 bl.setVisible(false);
@@ -235,17 +243,17 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
 
         // Pass 2: the vertical set-index bus and one horizontal tap into each way-table's left edge.
         for (int w = 0; w < wayRows.size(); w++) {
-            Line tap = taps.get(w);
+            BitWidthLine tap = taps.get(w);
             if (!present[w]) {
                 tap.setVisible(false);
                 continue;
             }
             Bounds panel = toOverlay(tableBoxes.get(w));
             tap.setVisible(true);
-            tap.setStartX(spineX);
-            tap.setStartY(selY[w]);
-            tap.setEndX(panel.getMinX());
-            tap.setEndY(selY[w]);
+            tap.startXProperty().set(spineX);
+            tap.startYProperty().set(selY[w]);
+            tap.endXProperty().set(panel.getMinX());
+            tap.endYProperty().set(selY[w]);
         }
 
         busLine.setVisible(true);
@@ -355,9 +363,14 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
                 : visible.get(visible.size() / 2);
     }
 
+    // layoutBounds, not boundsInLocal: way-tables' rowsBody children carry a BoxBlur while fogged
+    // (see setFogged), which would otherwise inflate a table's boundsInLocal by the blur radius and
+    // drop its panel bottom (botY) below the table's real border. Harmless for the individual
+    // row/cell nodes this is also called with, since an un-effected node's layoutBounds and
+    // boundsInLocal already coincide.
     private Bounds toOverlay(Region node)
     {
-        return overlay.sceneToLocal(node.localToScene(node.getBoundsInLocal()));
+        return overlay.sceneToLocal(node.localToScene(node.getLayoutBounds()));
     }
 
     private static int intValue(ObservableValue<Number> value, int fallback)
@@ -408,6 +421,25 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
         line.setManaged(false);
         line.getStyleClass().add("tlb-search-line");
         return line;
+    }
+
+    // One arrowed wire from the shared set-index bus into a way-table's addressed row -- just the
+    // arrow (BitWidthLine's own default), no mid-span "Nb" tag or value, since the bus's own bit
+    // width is already labelled elsewhere on the schematic.
+    private static BitWidthLine tapWire()
+    {
+        BitWidthLine wire = new BitWidthLine();
+        wire.setManaged(false);
+        wire.bitWidthIndicatorVisibleProperty().set(false);
+        return wire;
+    }
+
+    // Reaches into a BitWidthLine tap so its wire and arrow head light up together, matching
+    // PagedTLBTabView's own BitWidthLine-overload bindActive treatment.
+    private static void setTapActive(BitWidthLine tap, boolean active)
+    {
+        tap.getWire().pseudoClassStateChanged(ACTIVE, active);
+        tap.getArrowHead().pseudoClassStateChanged(ACTIVE, active);
     }
 
     private static Line connectorLine()

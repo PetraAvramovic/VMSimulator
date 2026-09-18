@@ -66,7 +66,8 @@ public class MemoryInspectorWindow
 
     private Stage build(Window owner)
     {
-        tableView = new WindowedTableView<>(memoryColumns(), "address", MemoryRow::locked);
+        tableView = new WindowedTableView<>(memoryColumns(), "address",
+                row -> row.locked() ? "page-table-row-locked" : null);
         tableView.setRowSource(new MemoryRowSource(context));
         VBox.setVgrow(tableView, Priority.ALWAYS);
 

@@ -16,14 +16,11 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollBar;
 import javafx.scene.control.TextField;
-import javafx.scene.effect.BlurType;
-import javafx.scene.effect.InnerShadow;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.util.Duration;
 import rs.ac.bg.etf.view.util.AddressScaleScrollBar;
 import rs.ac.bg.etf.view.util.ValueConverter;
@@ -44,28 +41,34 @@ import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel.FrameState;
  */
 public class FrameTableView extends VBox
 {
-    public static final double ROW_HEIGHT = 24;
+    // Drawn at WidthCalculator.LARGE_CELL_FONT_SIZE (the ".page-table-inline" marker on the root
+    // below applies that font size to every ".page-table-cell" in this table via CSS, the same
+    // mechanism PageTableView/the TLB tables use for their own enlarged rows) -- physically bigger
+    // cells, not more of them; VISIBLE_ROWS stays independent of that.
+    public static final double ROW_HEIGHT = 36;
     public static final int VISIBLE_ROWS = 12;
 
-    private static final double SWATCH_WIDTH = 20;
-    private static final double STATE_WIDTH = 78;
-    private static final double USER_WIDTH = 46;
-    private static final double PAGE_WIDTH = 52;
-    private static final double BIT_WIDTH = 30;
+    private static final double SWATCH_WIDTH = 30;
+    private static final double STATE_WIDTH = 112;
+    private static final double USER_WIDTH = 64;
+    private static final double PAGE_WIDTH = 72;
+    // Same column width PageTableView's own V/D columns use at this font size.
+    private static final double BIT_WIDTH = WidthCalculator.LARGE_BIT_COL_WIDTH;
     private static final double PANEL_PAD = 8;   // matches .frame-table-view -fx-padding
     private static final double BAR_WIDTH = 12;
-    private static final double SEEK_BAR_HEIGHT = 30;
+    private static final double SEEK_BAR_HEIGHT = 38;
     private static final int WHEEL_STEP = 3;
     /** How long a successful "Seek frame" keeps its landed-on row accented. */
     private static final Duration FOUND_HIGHLIGHT_DURATION = Duration.seconds(2.5);
-    /** One dim<->bright cycle of the found-row glow's pulse. */
-    private static final Duration FOUND_GLOW_PULSE = Duration.seconds(0.6);
-    private static final double FOUND_GLOW_RADIUS_MIN = 2;
-    private static final double FOUND_GLOW_RADIUS_MAX = 9;
-    private static final double FOUND_GLOW_CHOKE_MIN = 0.05;
-    private static final double FOUND_GLOW_CHOKE_MAX = 0.2;
-    /** Translucent, not the flat accent blue -- a subtle wash rather than a solid glowing ring. */
-    private static final Color FOUND_GLOW_COLOR = Color.web("#3498db", 0.45);
+    /** One dim<->bright cycle of the found-row border's pulse -- gentle breathing, not a flicker. */
+    private static final Duration FOUND_PULSE = Duration.seconds(0.9);
+    // A flat, solid-color border (.frame-table-row-found in light-theme.css) with its opacity
+    // pulsed in code, not a blur/glow effect -- every other "this is the interesting row/wire/
+    // value right now" accent in the app (frame-table-row-active, tlb-row-hit, connector-line
+    // :active, ...) is a flat colour, never a soft shadow, so a blurred glow always read as the
+    // odd one out here regardless of how it was tuned.
+    private static final double FOUND_BORDER_OPACITY_MIN = 0.25;
+    private static final double FOUND_BORDER_OPACITY_MAX = 1.0;
 
     private final PagedOSTabViewModel viewModel;
     private final long frameCount;
@@ -92,7 +95,7 @@ public class FrameTableView extends VBox
         this.frameCount = Math.max(1, viewModel.getFrameCount());
         this.rowsShown = (int) Math.min(frameCount, VISIBLE_ROWS);
         this.scrolls = frameCount > rowsShown;
-        getStyleClass().add("frame-table-view");
+        getStyleClass().addAll("frame-table-view", "page-table-inline");
         setFocusTraversable(true);
         foundHighlightTimer.setOnFinished(e -> { foundFrame = -1; render(); });
 
@@ -124,8 +127,12 @@ public class FrameTableView extends VBox
 
     // ------------------------------------------------------------------------------------
 
-    private double frameWidth() { return WidthCalculator.columnWidth("Frame", viewModel.frameHexDigitsProperty().get()); }
-    private double diskWidth() { return WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get()); }
+    private double frameWidth() {
+        return WidthCalculator.columnWidth("Frame", viewModel.frameHexDigitsProperty().get(), WidthCalculator.LARGE_CELL_FONT_SIZE);
+    }
+    private double diskWidth() {
+        return WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get(), WidthCalculator.LARGE_CELL_FONT_SIZE);
+    }
 
     private HBox buildSeekBar()
     {
@@ -146,6 +153,8 @@ public class FrameTableView extends VBox
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMinHeight(SEEK_BAR_HEIGHT);
         bar.setPrefHeight(SEEK_BAR_HEIGHT);
+        // Nothing to seek to when every frame already fits in the window at once.
+        bar.setDisable(!scrolls);
         return bar;
     }
 
@@ -322,15 +331,13 @@ public class FrameTableView extends VBox
     /** One frame row: swatch + the seven data columns, mutated in place as the window moves. */
     private final class RowNode
     {
-        // The glow effect (see setFound) is computed from the rendered node's own alpha, not its
-        // geometric bounds -- a row with no background wash (i.e. anything but the active/victim/
-        // evicting states) is otherwise fully transparent except for its text glyphs, so the glow
-        // would silhouette each label separately instead of the row as a whole. glowBacker is a
-        // permanently opaque (matching .frame-table-view's own white) layer behind "content" that
-        // the effect actually applies to, giving one clean rectangle regardless of row state.
-        private final Region glowBacker = new Region();
         private final HBox content = new HBox();
-        final StackPane box = new StackPane(glowBacker, content);
+        // Flat solid-colour border overlay for the "Seek frame" found accent (see setFound) --
+        // sits on top of "content" in the StackPane, its opacity pulsed in code. Independent of
+        // the state-driven background wash below it, so it reads the same on every row regardless
+        // of that row's own state colour.
+        private final Region foundBorder = new Region();
+        final StackPane box = new StackPane(content, foundBorder);
         private final Label swatch = new Label();
         private final Label frame = dataCell(frameWidth());
         private final Label state = dataCell(STATE_WIDTH);
@@ -342,13 +349,14 @@ public class FrameTableView extends VBox
 
         RowNode()
         {
-            glowBacker.getStyleClass().add("frame-table-row-glow-backer");
-            glowBacker.setMouseTransparent(true);
             content.getStyleClass().add("frame-table-row");
             content.setAlignment(Pos.CENTER_LEFT);
             box.setMinHeight(ROW_HEIGHT);
             box.setPrefHeight(ROW_HEIGHT);
             box.setMaxHeight(ROW_HEIGHT);
+            foundBorder.getStyleClass().add("frame-table-row-found");
+            foundBorder.setMouseTransparent(true);
+            foundBorder.setVisible(false);
             swatch.getStyleClass().add("os-frame-swatch");
             swatch.setAlignment(Pos.CENTER);
             swatch.setMinSize(SWATCH_WIDTH, ROW_HEIGHT);
@@ -387,50 +395,36 @@ public class FrameTableView extends VBox
                 content.getStyleClass().add("frame-table-row-active");
         }
 
-        private InnerShadow foundGlow;
         private Timeline foundPulse;
 
         /**
-         * Toggles the brief "Seek frame" landed-here accent: a pulsing glow, independent of the
-         * state-driven styling above. An InnerShadow, not a DropShadow: a DropShadow paints
-         * outside the node's own bounds, so with rows packed edge to edge (zero gap between
-         * them, and the scrollbar/panel border flush left and right) its visibility on each side
-         * ends up at the mercy of whatever neighboring content happens to be painted over it --
-         * inconsistent and partial. An InnerShadow glows inward from the edges of the row's own
-         * opaque shape (glowBacker), so it is fully self-contained and reads uniformly on all
-         * four sides regardless of neighboring rows.
+         * Toggles the brief "Seek frame" landed-here accent: a flat, solid-colour border
+         * (foundBorder) whose opacity pulses, independent of the state-driven background wash on
+         * "content" below it -- reads the same whether the row underneath is free, allocated, the
+         * active row, a victim, or mid-eviction, and matches every other "this is the interesting
+         * one right now" accent in the app (a flat colour, never a blurred glow).
          */
         void setFound(boolean found)
         {
             if (found)
             {
-                if (foundGlow == null)
-                {
-                    foundGlow = new InnerShadow();
-                    foundGlow.setBlurType(BlurType.GAUSSIAN);
-                    foundGlow.setColor(FOUND_GLOW_COLOR);
-                    foundGlow.setOffsetX(0);
-                    foundGlow.setOffsetY(0);
-                }
-                box.setEffect(foundGlow);
+                foundBorder.setVisible(true);
                 if (foundPulse == null)
                 {
                     foundPulse = new Timeline(
                             new KeyFrame(Duration.ZERO,
-                                    new KeyValue(foundGlow.radiusProperty(), FOUND_GLOW_RADIUS_MIN),
-                                    new KeyValue(foundGlow.chokeProperty(), FOUND_GLOW_CHOKE_MIN)),
-                            new KeyFrame(FOUND_GLOW_PULSE,
-                                    new KeyValue(foundGlow.radiusProperty(), FOUND_GLOW_RADIUS_MAX),
-                                    new KeyValue(foundGlow.chokeProperty(), FOUND_GLOW_CHOKE_MAX)));
+                                    new KeyValue(foundBorder.opacityProperty(), FOUND_BORDER_OPACITY_MIN)),
+                            new KeyFrame(FOUND_PULSE,
+                                    new KeyValue(foundBorder.opacityProperty(), FOUND_BORDER_OPACITY_MAX)));
                     foundPulse.setAutoReverse(true);
                     foundPulse.setCycleCount(Timeline.INDEFINITE);
                 }
                 foundPulse.playFromStart();
             }
-            else if (foundGlow != null)
+            else if (foundPulse != null)
             {
                 foundPulse.stop();
-                box.setEffect(null);
+                foundBorder.setVisible(false);
             }
         }
 

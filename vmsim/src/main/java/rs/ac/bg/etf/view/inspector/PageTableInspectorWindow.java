@@ -25,7 +25,8 @@ import rs.ac.bg.etf.view.util.WindowedTableView;
  * A separate, resizable window for browsing one user's full page table (up to {@code 2^pageBits}
  * entries -- the small table drawn directly in the MMU schematic only ever shows a handful of
  * rows around the addressed page). One instance is built lazily and reused across opens/closes
- * (see {@link #toggle}), mirroring {@code DiskBlockPopup}'s pattern.
+ * (see {@link #toggle}), mirroring {@code MemoryInspectorWindow}'s pattern. Each row's Disk cell
+ * is itself clickable, opening a {@link DiskBlockInspectorWindow} on that page's backing block.
  *
  * <p>Stays live while open: the underlying {@code PageTable} objects are the same mutable
  * instances the simulation itself updates, so re-pulling the currently visible window's data on
@@ -37,6 +38,7 @@ public class PageTableInspectorWindow
     private static final double ROOT_PADDING = 12;
 
     private final PageSimulationContext context;
+    private final DiskBlockInspectorWindow diskInspector;
 
     private Stage stage;
     private ComboBox<Integer> userPicker;
@@ -45,6 +47,7 @@ public class PageTableInspectorWindow
     public PageTableInspectorWindow(PageSimulationContext context, IntegerProperty currentStepNumber)
     {
         this.context = context;
+        this.diskInspector = new DiskBlockInspectorWindow(context, currentStepNumber);
         currentStepNumber.addListener((o, ov, nv) -> {
             if (tableView != null)
                 tableView.refresh();
@@ -74,6 +77,14 @@ public class PageTableInspectorWindow
 
     private Stage build(Window owner)
     {
+        // Built before the table/columns so the Disk column's onClick (below) can open the disk
+        // inspector owned by this window, rather than by whatever owns this one.
+        Stage s = new Stage();
+        s.initModality(Modality.NONE);
+        if (owner != null)
+            s.initOwner(owner);
+        s.setTitle("Page Table Inspector");
+
         Label userLabel = new Label("User");
         userLabel.getStyleClass().add("va-breakdown-title");
 
@@ -90,18 +101,12 @@ public class PageTableInspectorWindow
         pickerBar.setMinHeight(PICKER_ROW_HEIGHT);
         pickerBar.setPrefHeight(PICKER_ROW_HEIGHT);
 
-        tableView = new WindowedTableView<>(pageTableColumns(), "page");
+        tableView = new WindowedTableView<>(pageTableColumns(s), "page");
         VBox.setVgrow(tableView, Priority.ALWAYS);
 
         VBox root = new VBox(8, pickerBar, tableView);
         root.getStyleClass().add("page-table-inspector");
         root.setPadding(new Insets(ROOT_PADDING));
-
-        Stage s = new Stage();
-        s.initModality(Modality.NONE);
-        if (owner != null)
-            s.initOwner(owner);
-        s.setTitle("Page Table Inspector");
 
         Scene scene = new Scene(root, 460, 420);
         scene.getStylesheets().add(getClass().getResource("/rs/ac/bg/etf/light-theme.css").toExternalForm());
@@ -115,7 +120,7 @@ public class PageTableInspectorWindow
 
     // Column widths/hex digits mirror exactly how the schematic's own small PageTableView (and
     // PagedMMUTabViewModel before it) size the same Block/Disk columns.
-    private List<WindowedTableColumn<PageTableRow>> pageTableColumns()
+    private List<WindowedTableColumn<PageTableRow>> pageTableColumns(Window owner)
     {
         long maxPages = context.getMaxPages();
         int frameBits = context.getPhysicalAddressBits() - context.getWordBits();
@@ -133,7 +138,8 @@ public class PageTableInspectorWindow
                 new WindowedTableColumn<>("Block", WidthCalculator.columnWidth("Block", blockDigits),
                         row -> ValueConverter.toHex(row.block(), blockDigits)),
                 new WindowedTableColumn<>("Disk", WidthCalculator.columnWidth("Disk", diskDigits),
-                        row -> ValueConverter.toHex(row.disk(), diskDigits)));
+                        row -> ValueConverter.toHex(row.disk(), diskDigits),
+                        row -> diskInspector.toggle(owner, row.disk())));
     }
 
     private void selectUser(int user)

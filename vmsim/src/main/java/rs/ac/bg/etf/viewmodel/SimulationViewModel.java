@@ -14,6 +14,7 @@ import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.simulation.Simulation;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.viewmodel.listeners.SimulationNavigationListener;
 
 /**
@@ -268,9 +269,12 @@ public class SimulationViewModel
         }
 
         currentInstructionIndex.set(context.getCurrentInstructionIndex());
-        currentVirtualAddressHex.set(String.format("0x%X", context.getCurrentInstruction().getVirtualAddress()));
+        currentVirtualAddressHex.set(ValueConverter.toHex(
+                context.getCurrentInstruction().getVirtualAddress(),
+                ValueConverter.hexDigitsFor(context.getFullVirtualAddressBits())));
 
         long physicalAddress = context.getCurrentPhysicalAddress();
-        currentPhysicalAddressHex.set(physicalAddress < 0 ? "/" : String.format("0x%X", physicalAddress));
+        currentPhysicalAddressHex.set(physicalAddress < 0 ? "/" : ValueConverter.toHex(
+                physicalAddress, ValueConverter.hexDigitsFor(context.getPhysicalAddressBits())));
     }
 }

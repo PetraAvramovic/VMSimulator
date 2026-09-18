@@ -43,7 +43,10 @@ public class DirectTLBView extends StackPane implements TLBBodyView
         this.selectedWindowRow = selectedWindowRow;
 
         // A bordered panel behind the rows, matching AssociativeTLBView / the page table.
-        tableBox.getStyleClass().add("tlb-table");
+        // "page-table-inline" scales it up to read as the same size as the MMU tab's own
+        // PageTableView (see light-theme.css).
+        tableBox.getStyleClass().addAll("tlb-table", "page-table-inline");
+        rowsBody.getStyleClass().add("tlb-table-rows");
         rowsBody.getChildren().addAll(rows);
         tableBox.getChildren().addAll(header, rowsBody);
 
@@ -109,7 +112,10 @@ public class DirectTLBView extends StackPane implements TLBBodyView
             return;
         }
 
-        Bounds panel = overlay.sceneToLocal(tableBox.localToScene(tableBox.getBoundsInLocal()));
+        // layoutBounds, not boundsInLocal: rowsBody carries a BoxBlur while fogged (see setFogged),
+        // which would otherwise inflate boundsInLocal by the blur radius and drop the panel's bottom
+        // edge below the table's real border.
+        Bounds panel = overlay.sceneToLocal(tableBox.localToScene(tableBox.getLayoutBounds()));
 
         Number sel = selectedWindowRow.getValue();
         int selIndex = sel == null ? -1 : sel.intValue();

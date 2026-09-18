@@ -22,6 +22,15 @@ import java.util.List;
  * Renders a windowed page table grid; exposes the highlighted row's node so a connector line can target it.
  */
 public class PageTableView extends VBox {
+    // Drawn noticeably larger than the shared page-table-cell base (used by the OS/inspector tables)
+    // since this is the MMU schematic's own centrepiece -- scoped via the "page-table-inline" marker
+    // class in CSS (.page-table-inline .page-table-cell), not a change to the shared style. Shared
+    // with the TLB schematic's own row tables (see WidthCalculator's own doc comment) so both read
+    // as exactly the same size.
+    private static final double CELL_FONT_SIZE = WidthCalculator.LARGE_CELL_FONT_SIZE;
+    private static final double INDEX_COL_WIDTH = WidthCalculator.LARGE_INDEX_COL_WIDTH;
+    private static final double BIT_COL_WIDTH = WidthCalculator.LARGE_BIT_COL_WIDTH; // V / D columns
+
     private final PagedMMUTabViewModel viewModel;
     private final VBox rowsContainer = new VBox(2);
     private final ObjectProperty<Region> currentEntryAnchor = new SimpleObjectProperty<>();
@@ -35,7 +44,8 @@ public class PageTableView extends VBox {
 
     public PageTableView(PagedMMUTabViewModel viewModel) {
         this.viewModel = viewModel;
-        getStyleClass().add("page-table-view");
+        getStyleClass().addAll("page-table-view", "page-table-inline");
+        rowsContainer.getStyleClass().add("page-table-rows");
 
         getChildren().addAll(buildHeaderRow(), rowsContainer);
 
@@ -75,12 +85,12 @@ public class PageTableView extends VBox {
     private HBox buildHeaderRow() {
         HBox header = new HBox();
         header.getStyleClass().add("page-table-header");
-        Label validHeaderCell = cell("V", 30);
-        Label dirtyHeaderCell = cell("D", 30);
-        Label blockHeaderCell = cell("Block", WidthCalculator.columnWidth("Block", viewModel.blockHexDigitsProperty().get()));
-        Label diskHeaderCell = cell("Disk", WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get()));
+        Label validHeaderCell = cell("V", BIT_COL_WIDTH);
+        Label dirtyHeaderCell = cell("D", BIT_COL_WIDTH);
+        Label blockHeaderCell = cell("Block", WidthCalculator.columnWidth("Block", viewModel.blockHexDigitsProperty().get(), CELL_FONT_SIZE));
+        Label diskHeaderCell = cell("Disk", WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get(), CELL_FONT_SIZE));
         header.getChildren().addAll(
-                cell("Index", 60),
+                cell("Index", INDEX_COL_WIDTH),
                 validHeaderCell,
                 dirtyHeaderCell,
                 blockHeaderCell,
@@ -101,11 +111,11 @@ public class PageTableView extends VBox {
             HBox rowBox = new HBox();
             rowBox.getStyleClass().add("page-table-row");
 
-            Label indexCell = cell("", 60);
-            Label validCell = cell("", 30);
-            Label dirtyCell = cell("", 30);
-            Label blockCell = cell("", 80); // Placeholder width, will adjust dynamically
-            Label diskCell  = cell("", 140); // Placeholder width, will adjust dynamically
+            Label indexCell = cell("", INDEX_COL_WIDTH);
+            Label validCell = cell("", BIT_COL_WIDTH);
+            Label dirtyCell = cell("", BIT_COL_WIDTH);
+            Label blockCell = cell("", 100); // Placeholder width, will adjust dynamically
+            Label diskCell  = cell("", 175); // Placeholder width, will adjust dynamically
 
             rowBox.getChildren().addAll(indexCell, validCell, dirtyCell, blockCell, diskCell);
             rowsContainer.getChildren().add(rowBox);
@@ -119,19 +129,21 @@ public class PageTableView extends VBox {
      * Updates labels and toggles styles cleanly without re-inserting nodes.
      */
     private void updateRowData() {
-        double blockWidth = WidthCalculator.columnWidth("Block", viewModel.blockHexDigitsProperty().get());
-        double diskWidth = WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get());
+        double blockWidth = WidthCalculator.columnWidth("Block", viewModel.blockHexDigitsProperty().get(), CELL_FONT_SIZE);
+        double diskWidth = WidthCalculator.columnWidth("Disk", viewModel.diskHexDigitsProperty().get(), CELL_FONT_SIZE);
 
         List<Row> rowsDataList = viewModel.getVisibleRows();
         boolean isTableAccessed = viewModel.pageTableAccessedProperty().get();
         Region middleAnchorNode = null;
         Region resolvedActiveAnchorNode = null;
+        int resolvedActiveIndex = -1;
 
         for (int i = 0; i < recycledRowsPool.size(); i++) {
             StaticRowContainer rowComponent = recycledRowsPool.get(i);
-            
+
             // Clear prior styling states safely
             rowComponent.rootRowBox().getStyleClass().remove("page-table-row-current");
+            rowComponent.rootRowBox().getStyleClass().remove("page-table-row-before-current");
 
             if (i < rowsDataList.size()) {
                 Row rowData = rowsDataList.get(i);
@@ -151,6 +163,7 @@ public class PageTableView extends VBox {
                 if (rowData.current() && isTableAccessed) {
                     rowComponent.rootRowBox().getStyleClass().add("page-table-row-current");
                     resolvedActiveAnchorNode = rowComponent.rootRowBox();
+                    resolvedActiveIndex = i;
                 }
             } else {
                 // Hide trailing fallback rows if simulation window is smaller than capacity
@@ -160,6 +173,14 @@ public class PageTableView extends VBox {
             if (i == recycledRowsPool.size() / 2) {
                 middleAnchorNode = rowComponent.rootRowBox();
             }
+        }
+
+        // The row directly above the highlight still draws its own plain bottom divider (every row
+        // does), which sits right against the highlight's top border and reads as a stray line
+        // poking out of it. Suppressing just that one row's divider lets the highlight's own border
+        // stand alone on that edge, same as it already does on the other three.
+        if (resolvedActiveIndex > 0) {
+            recycledRowsPool.get(resolvedActiveIndex - 1).rootRowBox().getStyleClass().add("page-table-row-before-current");
         }
 
         // =========================================================================

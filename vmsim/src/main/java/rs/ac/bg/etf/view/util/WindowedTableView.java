@@ -2,6 +2,7 @@ package rs.ac.bg.etf.view.util;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 
 import javafx.application.Platform;
@@ -10,6 +11,7 @@ import javafx.beans.property.SimpleLongProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.scene.Cursor;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollBar;
 import javafx.scene.control.TextField;
@@ -42,6 +44,12 @@ public class WindowedTableView<R> extends VBox
     private static final double BAR_WIDTH = 12;
     private static final double SEEK_BAR_HEIGHT = 30;
     private static final int WHEEL_STEP = 3;
+    // .page-table-view's own uniform 10px padding + 1px border, on every side (rounded up):
+    // reserved on all four edges, so it has to come off both the width and height budgets, and --
+    // critically -- off onResize()'s own live "how many rows actually fit" measurement too, or a
+    // row can be judged to fit when the padding/border is actually already claiming that space,
+    // spilling the last row's box past the panel's own drawn border.
+    private static final double PANEL_CHROME = 24;
 
     private final List<WindowedTableColumn<R>> columns;
     private final VBox rowsBox = new VBox();
@@ -53,10 +61,12 @@ public class WindowedTableView<R> extends VBox
 
     private final LongProperty windowStart = new SimpleLongProperty(0);
     private WindowedRowSource<R> rowSource = emptySource();
-    private final Function<R, Boolean> rowLockedFn;
+    private final Function<R, String> rowStyleClassFn;
 
     private int rowsShown = MIN_VISIBLE_ROWS;
     private boolean syncingScrollBar = false;
+    /** 0 when there's no seek bar (null entryNoun), else {@link #SEEK_BAR_HEIGHT}. */
+    private final double seekBarHeight;
 
     /** @param entryNoun singular name of one row, e.g. "page" -- used in the seek field's prompt/errors. */
     public WindowedTableView(List<WindowedTableColumn<R>> columns, String entryNoun)
@@ -65,20 +75,25 @@ public class WindowedTableView<R> extends VBox
     }
 
     /**
-     * @param entryNoun singular name of one row, e.g. "page" -- used in the seek field's prompt/errors.
-     * @param rowLockedFn optional per-row predicate (e.g. "is this address kernel-locked") that
-     *                     toggles a {@code page-table-row-locked} style class on the row, in the
-     *                     same column-agnostic spirit as {@link WindowedTableColumn}; null if the
-     *                     table has no such notion.
+     * @param entryNoun singular name of one row, e.g. "page" -- used in the seek field's prompt/errors,
+     *                     or null to omit the seek bar entirely (e.g. a small table where jumping to
+     *                     an arbitrary position isn't a useful action).
+     * @param rowStyleClassFn optional per-row function (e.g. "is this address kernel-locked", "is
+     *                     this the FIFO queue's head") returning the extra style class to toggle on
+     *                     the row (or null for none), in the same column-agnostic spirit as {@link
+     *                     WindowedTableColumn}; null if the table has no such notion.
      */
-    public WindowedTableView(List<WindowedTableColumn<R>> columns, String entryNoun, Function<R, Boolean> rowLockedFn)
+    public WindowedTableView(List<WindowedTableColumn<R>> columns, String entryNoun, Function<R, String> rowStyleClassFn)
     {
         this.columns = columns;
-        this.rowLockedFn = rowLockedFn;
+        this.rowStyleClassFn = rowStyleClassFn;
+        this.seekBarHeight = entryNoun != null ? SEEK_BAR_HEIGHT : 0;
         getStyleClass().add("page-table-view");
         setFocusTraversable(true);
 
-        getChildren().addAll(buildSeekBar(entryNoun), buildHeader(), buildBody());
+        if (entryNoun != null)
+            getChildren().add(buildSeekBar(entryNoun));
+        getChildren().addAll(buildHeader(), buildBody());
         ensurePool(MIN_VISIBLE_ROWS);
         setMinWidth(minimumWidth());
         setMinHeight(minimumHeight());
@@ -115,13 +130,13 @@ public class WindowedTableView<R> extends VBox
     public double minimumWidth()
     {
         double contentWidth = columns.stream().mapToDouble(WindowedTableColumn::width).sum();
-        return contentWidth + BAR_WIDTH + 24; // + this component's own .page-table-view padding
+        return contentWidth + BAR_WIDTH + PANEL_CHROME;
     }
 
-    /** The shortest this component can usefully be: seek bar + header + MIN_VISIBLE_ROWS rows. */
+    /** The shortest this component can usefully be: seek bar (if any) + header + MIN_VISIBLE_ROWS rows. */
     public double minimumHeight()
     {
-        return SEEK_BAR_HEIGHT + ROW_HEIGHT + MIN_VISIBLE_ROWS * ROW_HEIGHT + 24;
+        return seekBarHeight + ROW_HEIGHT + MIN_VISIBLE_ROWS * ROW_HEIGHT + PANEL_CHROME;
     }
 
     private void setWindowStart(long start)
@@ -197,7 +212,7 @@ public class WindowedTableView<R> extends VBox
     // rebuilds the row pool to match, and re-clamps the window.
     private void onResize()
     {
-        double available = getHeight() - SEEK_BAR_HEIGHT - ROW_HEIGHT;
+        double available = getHeight() - seekBarHeight - ROW_HEIGHT - PANEL_CHROME;
         int rows = (int) Math.max(MIN_VISIBLE_ROWS, Math.floor(available / ROW_HEIGHT));
         if (rows == rowsShown)
             return;
@@ -308,6 +323,11 @@ public class WindowedTableView<R> extends VBox
     {
         final HBox box = new HBox();
         final List<Label> cells = new ArrayList<>();
+        String appliedStyleClass;
+        // The row currently bound to this pooled node -- a column's onClick fires against whatever
+        // that is *at click time*, since the same Label is reused for a different row as the window
+        // scrolls (see update()/hide()).
+        R currentRow;
 
         RowNode()
         {
@@ -322,6 +342,16 @@ public class WindowedTableView<R> extends VBox
                 cell.getStyleClass().add("page-table-cell");
                 cell.setPrefWidth(column.width());
                 cell.setAlignment(Pos.CENTER);
+                if (column.onClick() != null)
+                {
+                    cell.getStyleClass().add("page-table-cell-clickable");
+                    cell.setCursor(Cursor.HAND);
+                    cell.setOnMouseClicked(e -> {
+                        if (currentRow != null)
+                            column.onClick().accept(currentRow);
+                        e.consume();
+                    });
+                }
                 cells.add(cell);
                 box.getChildren().add(cell);
             }
@@ -331,21 +361,29 @@ public class WindowedTableView<R> extends VBox
         {
             box.setVisible(true);
             box.setManaged(true);
+            currentRow = row;
             for (int i = 0; i < columns.size(); i++)
                 cells.get(i).setText(columns.get(i).textFn().apply(row));
 
-            boolean locked = rowLockedFn != null && rowLockedFn.apply(row);
-            if (locked && !box.getStyleClass().contains("page-table-row-locked"))
-                box.getStyleClass().add("page-table-row-locked");
-            else if (!locked)
-                box.getStyleClass().remove("page-table-row-locked");
+            String styleClass = rowStyleClassFn != null ? rowStyleClassFn.apply(row) : null;
+            if (!Objects.equals(styleClass, appliedStyleClass))
+            {
+                if (appliedStyleClass != null)
+                    box.getStyleClass().remove(appliedStyleClass);
+                if (styleClass != null)
+                    box.getStyleClass().add(styleClass);
+                appliedStyleClass = styleClass;
+            }
         }
 
         void hide()
         {
             box.setVisible(false);
             box.setManaged(false);
-            box.getStyleClass().remove("page-table-row-locked");
+            currentRow = null;
+            if (appliedStyleClass != null)
+                box.getStyleClass().remove(appliedStyleClass);
+            appliedStyleClass = null;
         }
     }
 }

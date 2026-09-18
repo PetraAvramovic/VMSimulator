@@ -9,7 +9,6 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
-import javafx.scene.shape.Polyline;
 
 import rs.ac.bg.etf.view.inspector.MemoryInspectorWindow;
 import rs.ac.bg.etf.view.memory.MemoryTableView;
@@ -37,29 +36,43 @@ public class MemoryTabView extends StackPane
         getStyleClass().add("mmu-tab-container");
         canvas.setPrefHeight(CANVAS_HEIGHT);
 
-        double boxY = 50;
+        // Matches the MMU tab's own boxY exactly: the header needs a 58px clearance above the box
+        // (see paTitle below), and 50 was too small for that -- boxY - 58 went negative, shoving
+        // the header up past the canvas's own top edge instead of sitting under the tab bar with a
+        // sane margin the way every other tab's header does.
+        double boxY = 78;
         double boxX = MARGIN;
-        double tableY = boxY + FieldBoxes.BOX_HEIGHT + 90;
+        double tableY = boxY + FieldBoxes.ADDRESS_BOX_HEIGHT + 90;
 
+        // Same wide/short proportions and padding as the MMU/TLB tabs' own Block|Word address
+        // boxes (ADDRESS_BOX_HEIGHT/ADDRESS_FIELD_PADDING) -- not the taller, narrower "solo
+        // field" proportions (the plain 3-arg valueCell() overload, BOX_HEIGHT/FIELD_PADDING)
+        // meant for things like the Page Table Pointer box.
         Region paBox = FieldBoxes.valueCell(
                 "va-breakdown-cell-solo", viewModel.physicalAddressHexProperty(),
-                ValueConverter.hexDigitsFor(viewModel.getPhysicalAddressBits()));
+                ValueConverter.hexDigitsFor(viewModel.getPhysicalAddressBits()),
+                FieldBoxes.ADDRESS_BOX_HEIGHT, FieldBoxes.ADDRESS_FIELD_PADDING);
         double paBoxWidth = paBox.getPrefWidth();
         paBox.setLayoutX(boxX);
         paBox.setLayoutY(boxY);
 
-        // Left-aligned above its own field, matching every other tab's title placement -- the
-        // accented section-header style (matching the MMU tab's "Virtual Address"/"Physical
-        // Address" headers), not the small per-field title used for Page/Word/Block.
-        Label paTitle = FieldBoxes.sectionLabel("Physical Address", boxX, boxY - 24);
+        // The same bold, left-aligned "Physical Address" header style, and the same 58px gap down
+        // to the box, that the MMU tab uses above its own Block|Word pair -- this tab just has one
+        // undivided box instead of two, so there's no second, smaller "Block"/"Word" caption
+        // underneath the header filling part of that gap.
+        Label paTitle = FieldBoxes.sectionLabel("Physical Address", boxX, boxY - 58);
 
         BitWidthLine addressWire = new BitWidthLine();
         addressWire.bitsProperty().set(viewModel.getPhysicalAddressBits());
         addressWire.labelOnLeftProperty().set(false);
         addressWire.arrowTipVisibleProperty().set(false);
         addressWire.startXProperty().set(boxX + paBoxWidth / 2);
-        addressWire.startYProperty().set(boxY + FieldBoxes.BOX_HEIGHT);
+        addressWire.startYProperty().set(boxY + FieldBoxes.ADDRESS_BOX_HEIGHT);
         addressWire.endXProperty().bind(addressWire.startXProperty());
+        // endY is only a sane pre-layout placeholder -- updateConnector() below moves it down to
+        // whichever row is actually addressed, so this wire always spans the whole run from the
+        // box down to the row (not just partway), and the "Nb" tag -- always at a BitWidthLine's
+        // own midpoint -- reads as centred on that whole run rather than pinned near the box.
         addressWire.endYProperty().set(tableY - 20);
 
         // Only the table itself is centred horizontally in the (viewport-width-tracking) canvas --
@@ -75,12 +88,16 @@ public class MemoryTabView extends StackPane
 
         MemoryInspectorWindow inspector = new MemoryInspectorWindow(viewModel.getContext(), viewModel.currentStepNumberProperty());
 
-        canvas.getChildren().addAll(paTitle, paBox, addressWire, tableTitle, memoryTableView);
+        // The final leg into the addressed row -- a BitWidthLine like addressWire above (see its
+        // own class doc), not a raw Polyline. No bit-width tag of its own (addressWire's is the
+        // one tag for this whole run); it does end in an arrow, since it's the leg that actually
+        // lands on the row.
+        BitWidthLine addressAcross = new BitWidthLine();
+        addressAcross.bitWidthIndicatorVisibleProperty().set(false);
 
-        Polyline addressToRowLine = elbow();
-        canvas.getChildren().add(addressToRowLine);
+        canvas.getChildren().addAll(paTitle, paBox, addressWire, tableTitle, memoryTableView, addressAcross);
 
-        Runnable updateConnector = () -> updateConnector(memoryTableView, addressWire, addressToRowLine);
+        Runnable updateConnector = () -> updateConnector(memoryTableView, addressWire, addressAcross);
         memoryTableView.currentEntryAnchorProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateConnector));
         memoryTableView.layoutXProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateConnector));
         canvas.widthProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateConnector));
@@ -88,7 +105,7 @@ public class MemoryTabView extends StackPane
         Platform.runLater(updateConnector);
 
         bindActive(addressWire, viewModel.memoryAddressedProperty());
-        bindActive(addressToRowLine, viewModel.memoryAddressedProperty());
+        bindActive(addressAcross, viewModel.memoryAddressedProperty());
 
         memoryTableView.setOnMouseClicked(e -> inspector.toggle(
                 memoryTableView.getScene() != null ? memoryTableView.getScene().getWindow() : null,
@@ -103,31 +120,29 @@ public class MemoryTabView extends StackPane
         getChildren().add(scrollPane);
     }
 
-    private void updateConnector(MemoryTableView memoryTableView, BitWidthLine addressWire, Polyline addressToRowLine)
+    private void updateConnector(MemoryTableView memoryTableView, BitWidthLine addressWire, BitWidthLine addressAcross)
     {
         Region rowAnchor = memoryTableView.currentEntryAnchorProperty().get();
         if (rowAnchor == null || rowAnchor.getScene() == null)
             return;
 
-        double sourceX = addressWire.endXProperty().get();
-        double sourceY = addressWire.endYProperty().get();
+        double sourceX = addressWire.startXProperty().get();
 
         Bounds rowBounds = canvas.sceneToLocal(rowAnchor.localToScene(rowAnchor.getBoundsInLocal()));
         double targetY = rowBounds.getCenterY();
         double tableLeftX = memoryTableView.getLayoutX();
 
-        addressToRowLine.getPoints().setAll(
-                sourceX, sourceY,
-                sourceX, targetY,
-                tableLeftX, targetY);
-        addressToRowLine.toFront();
-    }
+        // addressWire now runs the whole way down to the addressed row itself, so its own
+        // midpoint -- where the bit-width tag always sits -- is centred on that whole run.
+        addressWire.endYProperty().set(targetY);
 
-    private Polyline elbow(double... points)
-    {
-        Polyline polyline = new Polyline(points);
-        polyline.getStyleClass().add("connector-line");
-        return polyline;
+        addressAcross.startXProperty().set(sourceX);
+        addressAcross.startYProperty().set(targetY);
+        addressAcross.endXProperty().set(tableLeftX);
+        addressAcross.endYProperty().set(targetY);
+
+        addressWire.toFront();
+        addressAcross.toFront();
     }
 
     private void bindActive(javafx.scene.Node node, javafx.beans.property.BooleanProperty active)

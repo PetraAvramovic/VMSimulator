@@ -32,7 +32,8 @@ public class MemoryTableView extends VBox
     public MemoryTableView(MemoryTabViewModel viewModel)
     {
         this.viewModel = viewModel;
-        getStyleClass().add("page-table-view");
+        getStyleClass().addAll("page-table-view", "page-table-flush");
+        rowsContainer.getStyleClass().add("page-table-rows");
 
         getChildren().addAll(buildHeaderRow(), rowsContainer);
 
