@@ -320,93 +320,143 @@
     -fx-background-color: #fbdcd9;
 }
 
-/* Config editor windows' editable TableViews (Instructions / Page Tables / Initial Memory
-   Content) -- flattens the default Modena grey-gradient header and cell gridlines down to the
-   same flat-card, horizontal-divider-only look the schematic tabs' own tables use
-   (.page-table-view/.frame-table-view), instead of looking like an unstyled stock control. Sits
-   directly under its own .config-editor-table-header (see ConfigEditorWindowSupport.build), which
-   owns the card's top edge/corners, hence the bottom-only radius and no top border here. */
-.config-editor-table {
+/* Config editor windows' bulk-data tables (Instructions / Page Tables / Initial Memory Content)
+   -- hand-rolled from HBox/VBox/Label, not a javafx.scene.control.TableView. Every header cell and
+   the row cell below it are sized from the exact same value (see
+   ConfigEditorWindowSupport.sizeToColumn), so there's no Modena header-vs-cell padding to reconcile
+   at all; this stylesheet only ever needs to draw colors/borders on top. Matches the same flat-card,
+   horizontal-divider-only look the schematic tabs' own tables use (.page-table-view/.frame-table-view).
+   .config-editor-card wraps the header row + the scrollable rows column as one bordered panel. */
+.config-editor-card {
     -fx-background-color: #ffffff;
     -fx-border-color: #dcdde1;
-    -fx-border-width: 0 1px 1px 1px;
-    -fx-border-radius: 0 0 6px 6px;
-    -fx-background-radius: 0 0 6px 6px;
-    -fx-table-cell-border-color: transparent; /* no vertical gridlines between cells */
-    -fx-padding: 0;
+    -fx-border-width: 1px;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
 }
 
-/* TableView has no supported way to drop its native header outright, so it's collapsed to zero
-   height instead -- ConfigEditorWindowSupport.build() draws its own header row (plain Labels
-   bound to each TableColumn's widthProperty()) above the table, so the header text is guaranteed
-   to line up with its column's cells instead of drifting against Modena's own header padding. */
-.config-editor-table .column-header-background {
-    -fx-pref-height: 0;
-    -fx-min-height: 0;
-    -fx-max-height: 0;
-    -fx-background-color: transparent;
-}
-
-/* The custom header row built in ConfigEditorWindowSupport.build() / its per-column Labels. */
-.config-editor-table-header {
+.config-editor-header-row {
     -fx-background-color: #f5f6f8;
-    -fx-border-color: #dcdde1;
-    -fx-border-width: 1px 1px 0 1px;
-    -fx-border-radius: 6px 6px 0 0;
+    -fx-border-color: transparent transparent #dcdde1 transparent;
+    -fx-border-width: 0 0 1px 0;
     -fx-background-radius: 6px 6px 0 0;
 }
 
-.config-editor-table-header-cell {
+.config-editor-header-cell {
     -fx-font-size: 12px;
     -fx-font-weight: bold;
     -fx-text-fill: #34495e;
-    -fx-alignment: center-left;
     -fx-padding: 8px 14px 8px 14px;
+    /* Centering is set directly via label.setAlignment(Pos.CENTER) in code, not here -- matching
+       WindowedTableView.headerCell(), which has no CSS alignment rule for .page-table-cell either. */
 }
 
-.config-editor-table .table-row-cell {
+/* Modena's default .scroll-pane carries its own built-in padding (and the .viewport inside it
+   its own insets) -- with no equivalent on the header row (a plain, unwrapped HBox sibling), that
+   was shifting every row a few pixels right of the header above it, uniformly across every column
+   at once. Zeroed on both the control and its viewport so the rows start at the exact same x the
+   header does. */
+.config-editor-rows-scroll,
+.config-editor-rows-scroll > .viewport {
+    -fx-background-color: #ffffff;
+    -fx-background-radius: 0 0 6px 6px;
+    -fx-padding: 0;
+    -fx-background-insets: 0;
+}
+
+.config-editor-row {
     -fx-background-color: #ffffff;
     -fx-border-color: transparent transparent #eef0f2 transparent;
     -fx-border-width: 0 0 1px 0;
-    -fx-table-cell-border-color: transparent;
-    -fx-cell-size: 32px;
 }
 
-.config-editor-table .table-row-cell:selected {
-    -fx-background-color: derive(#3498db, 85%);
+.config-editor-row:hover {
+    -fx-background-color: #fafbfc;
 }
 
-.config-editor-table .table-cell {
+/* Drag-to-reorder (Instructions only -- see ConfigEditorWindowSupport's reorderable param): the
+   grip glyph leading each row, and the two drag-gesture states rows can be in. */
+.config-editor-drag-handle {
+    -fx-text-fill: #b5b8c0;
+    -fx-font-size: 13px;
+    -fx-cursor: move;
+}
+
+.config-editor-drag-handle:hover {
+    -fx-text-fill: #7f8c8d;
+}
+
+/* The row currently being dragged. */
+.config-editor-row-dragging {
+    -fx-opacity: 0.4;
+}
+
+/* The row the dragged item would land on if dropped now. */
+.config-editor-row-drag-over {
+    -fx-border-color: #3498db transparent transparent transparent;
+    -fx-border-width: 2px 0 0 0;
+}
+
+/* A value cell's resting (non-editing) state: a plain borderless label, styled identically to
+   .config-editor-header-cell (same font size/padding) so the display text lines up with the header
+   above it exactly -- the same fixed width every column's header/row cells share (see
+   EditorColumn/ConfigEditorWindowSupport.headerCell), extended to the text inside it. Only swaps
+   to .config-editor-field/.config-editor-combo on double-click (see
+   ConfigEditorWindowSupport.openValueEditor/openEnumEditor); the soft hover tint is the only hint
+   it's editable, instead of every cell looking like a permanently-open input box. */
+.config-editor-cell-label {
     -fx-font-size: 13px;
     -fx-text-fill: #2c3e50;
-    -fx-border-color: transparent;
     -fx-padding: 8px 14px 8px 14px;
-    -fx-alignment: center-left;
+    /* Centering is set directly via label.setAlignment(Pos.CENTER) in code, not here -- see
+       .config-editor-header-cell above for why. */
 }
 
-.config-editor-table .table-cell:selected {
-    -fx-text-fill: #2c3e50;
+.config-editor-cell-label:hover {
+    -fx-background-color: #eef3fa;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
 }
 
-/* The trailing delete-row column (ConfigEditorWindowSupport.deleteColumn) -- centred rather than
-   the rest of the table's left-aligned text, and not flush against the outer border. */
-.config-editor-table .row-delete-cell {
+/* Editable fields inside a row -- same look as the config screen's own .text-field/.combo-box,
+   minus their fixed pref-width (each field here is sized per-column by
+   ConfigEditorWindowSupport.sizeToColumn instead). */
+.config-editor-field {
+    -fx-background-color: #ffffff;
+    -fx-background-insets: 0;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 5px 8px 5px 8px;
+    -fx-font-size: 13px;
     -fx-alignment: center;
-    -fx-padding: 2px;
 }
 
-/* Remove the default blue keyboard-focus ring -- row/cell selection is already shown by the
-   blue tint above, matching the flat, chrome-free look the rest of the app uses. */
-.config-editor-table,
-.config-editor-table .table-row-cell,
-.config-editor-table .table-cell {
-    -fx-focus-color: transparent;
-    -fx-faint-focus-color: transparent;
+.config-editor-field:focused {
+    -fx-border-color: #3498db;
+    -fx-effect: dropshadow(three-pass-box, rgba(52,152,219,0.2), 4, 0, 0, 0);
 }
 
-/* Flat checkbox cells (Valid/Dirty columns) matching the app's minimal input styling instead of
-   Modena's default beveled box. */
-.config-editor-table .check-box > .box {
+.config-editor-combo {
+    -fx-background-color: #ffffff;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4px;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-font-size: 13px;
+    -fx-alignment: center;
+}
+
+.config-editor-combo:hover {
+    -fx-border-color: #b5b8c0;
+}
+
+/* Flat checkbox (Valid/Dirty columns) matching the app's minimal input styling instead of
+   Modena's default beveled box. Centering is handled by boolField()'s StackPane wrapper, not
+   -fx-alignment here -- CheckBoxSkin doesn't honor that property the way a plain Label does. */
+.config-editor-checkbox > .box {
     -fx-background-color: #ffffff;
     -fx-border-color: #cccccc;
     -fx-border-width: 1px;
@@ -415,12 +465,12 @@
     -fx-padding: 3px;
 }
 
-.config-editor-table .check-box:selected > .box {
+.config-editor-checkbox:selected > .box {
     -fx-background-color: #3498db;
     -fx-border-color: #2980b9;
 }
 
-.config-editor-table .check-box:selected > .box > .mark {
+.config-editor-checkbox:selected > .box > .mark {
     -fx-background-color: #ffffff;
 }
 
