@@ -82,7 +82,28 @@ public class DirectTLB extends TLB
     {
         entries.set(record.position, record.entry);
     }
-    
+
+    @Override
+    public boolean wouldEvict(long tag)
+    {
+        TLBEntry existing = entries.get(indexFor(tag));
+        return existing != null && existing.isValid();
+    }
+
+    @Override
+    public TLBEntry evictForInsertion(long tag)
+    {
+        // A direct-mapped TLB has no replacement policy choosing among candidates -- the target
+        // slot is fixed by the tag alone -- so there is no pointer to advance, and this is a pure
+        // peek: insert() overwrites whatever the caller leaves marked invalid here.
+        return entries.get(indexFor(tag));
+    }
+
+    @Override
+    protected void restoreEvictionPointer(EvictionRecord record)
+    {
+    }
+
     @Override
     public void flushProcessTag(int processId)
     {

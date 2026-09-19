@@ -10,22 +10,30 @@ import javafx.beans.property.ObjectProperty;
 import javafx.collections.ListChangeListener;
 import javafx.css.PseudoClass;
 import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import rs.ac.bg.etf.model.simulation.SimulationConfig.TLBType;
 import rs.ac.bg.etf.view.inspector.TLBInspectorWindow;
 import rs.ac.bg.etf.view.shape.BitWidthLine;
 import rs.ac.bg.etf.view.shape.CurlyBrace;
 import rs.ac.bg.etf.view.util.FieldBoxes;
 import rs.ac.bg.etf.view.util.ValueConverter;
+import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel;
 import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel.LookupOutcome;
 import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel.Row;
 import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel.TlbLine;
+import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel.TlbSideNote;
 
 /**
  * Paged TLB tab: an address-formation schematic (Process / Virtual Address / Physical Address
@@ -532,6 +540,99 @@ public class PagedTLBTabView extends StackPane
         // true right edge instead of a fixed pixel canvas size -- matches PagedMMUTabView's ScrollPane.
         scrollPane.setFitToWidth(true);
         getChildren().add(scrollPane);
+        getChildren().add(buildSideNoteOverlay(viewModel));
+    }
+
+    // An eviction can invalidate a TLB entry belonging to a victim key that isn't the one currently
+    // addressed -- the visible window above has no row to show that on. Rather than thread this
+    // through the schematic's own connector-routing math, it's an overlay pinned to this StackPane
+    // directly (a sibling of the ScrollPane, not inside the canvas), matching PagedMMUTabView's own
+    // side-note treatment exactly, so it can never collide with the wiring above and stays visible
+    // regardless of scroll position or which TLB body type (associative/direct/set-associative) is
+    // mounted. The entry itself is rendered as an actual little table (reusing
+    // .page-table-view/.page-table-header/.page-table-row/.page-table-cell verbatim, the same way
+    // every real TLB row in this tab is built) so it reads as "here is that entry," not another
+    // line of step-description prose.
+    private Node buildSideNoteOverlay(PagedTLBTabViewModel viewModel)
+    {
+        Label headline = new Label();
+        headline.getStyleClass().add("side-effect-note-headline");
+
+        Label userLabel = new Label();
+        userLabel.getStyleClass().add("side-effect-note-user");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button dismissButton = new Button("×");
+        dismissButton.getStyleClass().add("side-effect-note-dismiss");
+        dismissButton.setOnAction(e -> viewModel.dismissSideNote());
+
+        HBox header = new HBox(6, headline, userLabel, spacer, dismissButton);
+        header.getStyleClass().add("side-effect-note-header");
+        header.setAlignment(Pos.CENTER_LEFT);
+
+        // Widths mirror TLBRowView.cell()'s own approach (a fixed width per column, so text
+        // centers within a real box) -- without them every cell collapses to its own bare text
+        // width with no gap between columns at all.
+        double indexWidth = WidthCalculator.plainColumnWidth("Index", 4);
+        double bitWidth = WidthCalculator.plainColumnWidth("V", 1);
+        double tagWidth = WidthCalculator.columnWidth("Tag", viewModel.tagHexDigitsProperty().get());
+        double blockWidth = WidthCalculator.columnWidth("Block", viewModel.blockHexDigitsProperty().get());
+
+        Label indexCell = tableCell("", indexWidth);
+        Label vCell = tableCell("", bitWidth);
+        Label dCell = tableCell("", bitWidth);
+        Label tagCell = tableCell("", tagWidth);
+        Label blockCell = tableCell("", blockWidth);
+        HBox headerRow = new HBox(
+                tableCell("Index", indexWidth), tableCell("V", bitWidth), tableCell("D", bitWidth),
+                tableCell("Tag", tagWidth), tableCell("Block", blockWidth));
+        headerRow.getStyleClass().add("page-table-header");
+        HBox dataRow = new HBox(indexCell, vCell, dCell, tagCell, blockCell);
+        dataRow.getStyleClass().add("page-table-row");
+        VBox miniTable = new VBox(headerRow, dataRow);
+        miniTable.getStyleClass().add("page-table-view");
+
+        VBox card = new VBox(6, header, miniTable);
+        card.getStyleClass().add("side-effect-note-card");
+        // A Region's default max width/height is unbounded, so without capping both, StackPane
+        // stretches this to fill the whole tab (exactly what happened before this fix).
+        card.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        StackPane.setAlignment(card, Pos.BOTTOM_LEFT);
+        StackPane.setMargin(card, new Insets(0, 0, MARGIN, MARGIN));
+
+        Runnable rebuild = () -> {
+            TlbSideNote note = viewModel.sideNoteProperty().get();
+            boolean visible = note != null;
+            card.setVisible(visible);
+            card.setManaged(visible);
+            if (!visible)
+                return;
+
+            headline.setText(note.headline());
+            userLabel.setText(note.user() >= 0 ? "user " + note.user() + ", page " + note.page() : "");
+            indexCell.setText(note.index() >= 0 ? Integer.toString(note.index()) : "-");
+            vCell.setText("0");
+            dCell.setText(note.dirty() ? "1" : "0");
+            tagCell.setText(ValueConverter.toHex(note.tag(), viewModel.tagHexDigitsProperty().get()));
+            blockCell.setText(ValueConverter.toHex(note.block(), viewModel.blockHexDigitsProperty().get()));
+        };
+        viewModel.sideNoteProperty().addListener((o, ov, nv) -> rebuild.run());
+        rebuild.run();
+
+        return card;
+    }
+
+    private Label tableCell(String text, double width)
+    {
+        Label label = new Label(text);
+        label.getStyleClass().add("page-table-cell");
+        label.setMinWidth(width);
+        label.setPrefWidth(width);
+        label.setMaxWidth(width);
+        label.setAlignment(Pos.CENTER);
+        return label;
     }
 
     // Both TLB families feed bodyView.addressAnchorProperty(); only how much of the address enters

@@ -38,18 +38,21 @@ public class AssociativeTLB extends TLB
     @Override
     public TLBEntry insert(TLBEntry entry)
     {
-        // First, look for any empty slot and fill it
+        // First, look for any free slot -- either genuinely empty, or holding an entry a prior
+        // evictForInsertion() already invalidated in place -- and fill it
         for (int i = 0; i < size; i++)
         {
-            if (entries.get(i) == null)
+            TLBEntry existing = entries.get(i);
+            if (existing == null || !existing.isValid())
             {
                 entries.set(i, entry);
-                pushInsertion(null, entry, i);
-                return null;
+                pushInsertion(existing, entry, i);
+                return existing;
             }
         }
-        
-        // No free slot: dumb pointer eviction (doesn't care about validity)
+
+        // No free slot: dumb pointer eviction (doesn't care about validity). Shouldn't happen once
+        // callers always run evictForInsertion() first, but kept as a defensive fallback.
         int victimIndex = fifoPointer % size;
         TLBEntry evicted = entries.get(victimIndex);
         entries.set(victimIndex, entry);
@@ -58,20 +61,14 @@ public class AssociativeTLB extends TLB
         pushInsertion(evicted, entry, victimIndex, oldPointer);
         return evicted;
     }
-    
+
     @Override
     protected void undoInsertionInternal(InsertionRecord record)
     {
-        if (record.evictedEntry != null)
+        entries.set(record.position, record.evictedEntry);
+        if (record.secondaryPosition >= 0)
         {
-            // Eviction occurred: restore evicted entry and restore pointer to pre-eviction state
-            entries.set(record.position, record.evictedEntry);
             fifoPointer = record.secondaryPosition;
-        }
-        else
-        {
-            // No eviction: just clear the slot
-            entries.set(record.position, null);
         }
     }
     
@@ -95,5 +92,36 @@ public class AssociativeTLB extends TLB
     protected void restoreInvalidatedEntry(InvalidationRecord record)
     {
         entries.set(record.position, record.entry);
+    }
+
+    @Override
+    public boolean wouldEvict(long tag)
+    {
+        for (int i = 0; i < size; i++)
+        {
+            TLBEntry existing = entries.get(i);
+            if (existing == null || !existing.isValid())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public TLBEntry evictForInsertion(long tag)
+    {
+        int victimIndex = fifoPointer % size;
+        TLBEntry evicted = entries.get(victimIndex);
+        int oldPointer = fifoPointer;
+        fifoPointer++;
+        pushEviction(-1, oldPointer);
+        return evicted;
+    }
+
+    @Override
+    protected void restoreEvictionPointer(EvictionRecord record)
+    {
+        fifoPointer = record.pointerValue;
     }
 }

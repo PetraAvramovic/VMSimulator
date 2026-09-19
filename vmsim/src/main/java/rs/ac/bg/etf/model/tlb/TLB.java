@@ -29,6 +29,24 @@ public abstract class TLB
     }
     
     /**
+     * Record of a replacement pointer advanced ahead of an insertion, for undo support.
+     * evictForInsertion() never removes the entry it evicts from {@code entries} (the caller marks
+     * it invalid in place instead, leaving its other fields inspectable), so there is nothing to
+     * restore here except whichever hardware replacement pointer it advanced.
+     */
+    protected static class EvictionRecord
+    {
+        public final int setIndex;
+        public final int pointerValue;
+
+        public EvictionRecord(int setIndex, int pointerValue)
+        {
+            this.setIndex = setIndex;
+            this.pointerValue = pointerValue;
+        }
+    }
+
+    /**
      * Record of an insertion that caused eviction, for undo support.
      */
     protected static class InsertionRecord
@@ -57,7 +75,8 @@ public abstract class TLB
     protected int processBits;
     protected Stack<InvalidationRecord> invalidationStack;
     protected Stack<InsertionRecord> insertionStack;
-    
+    protected Stack<EvictionRecord> evictionStack;
+
     public TLB(int size, int addressBits, int processBits)
     {
         this.size = size;
@@ -66,6 +85,7 @@ public abstract class TLB
         this.processBits = processBits;
         this.invalidationStack = new Stack<>();
         this.insertionStack = new Stack<>();
+        this.evictionStack = new Stack<>();
     }
     
     /**
@@ -88,6 +108,33 @@ public abstract class TLB
      * @return The entry that was invalidated, or null if no matching entry was found
      */
     public abstract TLBEntry invalidateEntry(long tag);
+
+    /**
+     * Checks, without mutating anything, whether inserting an entry for the given tag would have
+     * to evict an existing entry (i.e. the relevant slot/set is currently full).
+     * @param tag The tag that would be inserted
+     * @return true if insertion would require an eviction first
+     */
+    public abstract boolean wouldEvict(long tag);
+
+    /**
+     * Evicts whichever entry currently occupies the slot an insertion for the given tag would
+     * target, ahead of that insertion actually happening. Only meaningful to call when
+     * {@link #wouldEvict} just returned true for the same tag. Marks nothing itself -- the caller
+     * is expected to invalidate the returned entry (set its own valid/dirty fields) in place; the
+     * entry stays in {@code entries} at its original slot the whole time, still inspectable (tag,
+     * block, ...), and {@code insert} treats an invalid-but-present slot as free.
+     * @param tag The tag the upcoming insertion targets
+     * @return The entry occupying the target slot
+     */
+    public abstract TLBEntry evictForInsertion(long tag);
+
+    /**
+     * Restores whichever hardware replacement pointer evictForInsertion advanced. Called by
+     * undoEviction to undo evictForInsertion; a no-op for a TLB flavour with no such pointer.
+     * @param record The eviction record identifying which pointer to restore, and to what value
+     */
+    protected abstract void restoreEvictionPointer(EvictionRecord record);
     
     /**
      * Restores an invalidated entry to its original position.
@@ -132,7 +179,22 @@ public abstract class TLB
         undoInsertionInternal(record);
         return true;
     }
-    
+
+    /**
+     * Undoes the last evictForInsertion call by popping from the eviction stack and restoring.
+     * @return true if an undo was performed, false if the stack was empty
+     */
+    public boolean undoEviction()
+    {
+        if (evictionStack.isEmpty())
+        {
+            return false;
+        }
+        EvictionRecord record = evictionStack.pop();
+        restoreEvictionPointer(record);
+        return true;
+    }
+
     /**
      * Protected helper to push an invalidated entry onto the undo stack with its position.
      * Called by subclasses in their invalidateEntry implementations.
@@ -169,7 +231,17 @@ public abstract class TLB
     {
         insertionStack.push(new InsertionRecord(evictedEntry, insertedEntry, position, secondaryPosition));
     }
-    
+
+    /**
+     * Protected helper to push an eviction-for-insertion pointer record onto the undo stack.
+     * @param setIndex Which set's pointer advanced (unused / -1 for a TLB with a single, whole-table pointer)
+     * @param pointerValue The pointer's pre-eviction value
+     */
+    protected void pushEviction(int setIndex, int pointerValue)
+    {
+        evictionStack.push(new EvictionRecord(setIndex, pointerValue));
+    }
+
     /**
      * Checks if an entry with the given tag exists in the TLB.
      * @param tag The tag to search for

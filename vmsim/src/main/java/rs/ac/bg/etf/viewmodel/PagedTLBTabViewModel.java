@@ -24,8 +24,11 @@ import rs.ac.bg.etf.model.simulation.SimulationContext;
 import rs.ac.bg.etf.model.simulation.step.InstructionFetchStep;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.TLBUpdateStep;
+import rs.ac.bg.etf.model.simulation.step.page.PageEvictionStep;
 import rs.ac.bg.etf.model.simulation.step.page.PageFormPhysicalAddressFromTLBStep;
+import rs.ac.bg.etf.model.simulation.step.page.PageTLBEvictionStep;
 import rs.ac.bg.etf.model.simulation.step.page.PageTLBLookupStep;
+import rs.ac.bg.etf.model.tlb.DirectTLB;
 import rs.ac.bg.etf.model.tlb.SetAssociativeTLB;
 import rs.ac.bg.etf.model.tlb.TLB;
 import rs.ac.bg.etf.model.tlb.TLBEntry;
@@ -55,6 +58,15 @@ public class PagedTLBTabViewModel
     /** One TLB slot in the visible window: {@code index} is its real slot number, {@code highlight}
      *  marks the slot the running instruction just hit or was inserted into. */
     public record Row(int index, boolean valid, boolean dirty, long tag, long block, RowHighlight highlight) {}
+
+    /** A TLB entry snapshot worth calling out because it changed off-window (an eviction's victim
+     *  key, not the addressed one) -- rendered to look like an actual table row, not prose, so it
+     *  reads as "here is the entry" rather than another step description. {@code user}/{@code page}
+     *  are -1 when the entry's identity isn't safely decodable from its (possibly reduced) tag
+     *  alone; the tag itself is always shown regardless. {@code index} (the entry's physical slot)
+     *  is -1 when the entry has already been removed from the TLB's own storage by the time this
+     *  is computed, so its slot can no longer be looked up. */
+    public record TlbSideNote(String headline, int user, long page, int index, long tag, boolean dirty, long block) {}
 
     private final PageSimulationContext context;
     private final TLB tlb;
@@ -86,6 +98,12 @@ public class PagedTLBTabViewModel
 
     private final ObjectProperty<TLBType> tlbType = new SimpleObjectProperty<>(TLBType.ASSOCIATIVE);
     private final Map<TlbLine, BooleanProperty> lineActive = new EnumMap<>(TlbLine.class);
+    // Notification card for an eviction's off-window TLB-entry invalidation -- the victim key is
+    // generally not the addressed one, so it never shows up in the visible window above. Null when
+    // there's nothing to show. Dismissible the same way PagedMMUTabViewModel's own card is.
+    private final ObjectProperty<TlbSideNote> sideNote = new SimpleObjectProperty<>(null);
+    private SimulationStep<? extends SimulationContext> lastNoteStep = null;
+    private boolean sideNoteDismissed = false;
 
     // Outcome of the current instruction's probe, and which visible-window row (0-based, or -1) it
     // resolved to -- both drive the direct-mapped schematic's colouring and address anchor.
@@ -210,6 +228,20 @@ public class PagedTLBTabViewModel
     public BooleanProperty lineActiveProperty(TlbLine line)
     {
         return lineActive.get(line);
+    }
+
+    /** Notification card describing a TLB entry change worth calling out; null when there's
+     *  nothing to show. */
+    public ObjectProperty<TlbSideNote> sideNoteProperty()
+    {
+        return sideNote;
+    }
+
+    /** Dismisses the current notification card; it stays hidden until a genuinely new occurrence. */
+    public void dismissSideNote()
+    {
+        sideNoteDismissed = true;
+        sideNote.set(null);
     }
 
     private void refresh()
@@ -415,6 +447,44 @@ public class PagedTLBTabViewModel
 
         for (TlbLine line : TlbLine.values())
             lineActive.get(line).set(active.contains(line));
+
+        recomputeSideNote(history);
+    }
+
+    // Describes whatever the single current step just did to a TLB entry outside the visible
+    // window -- scoped to that one step only (matching SimulationViewModel's tab-notification
+    // badge exactly, and PagedMMUTabViewModel's own card). A step producing a *different* card
+    // than last time is a new occurrence and clears any prior dismissal. Every other TLB-affecting
+    // step touches the addressed key, already covered by this tab's own row highlighting
+    // (RowHighlight HIT/MISS/INSERT); an eviction's victim is the one case that's genuinely a
+    // different, otherwise-invisible key.
+    private void recomputeSideNote(List<SimulationStep<? extends SimulationContext>> history)
+    {
+        SimulationStep<? extends SimulationContext> step = history.isEmpty() ? null : history.get(history.size() - 1);
+        if (step != lastNoteStep)
+        {
+            sideNoteDismissed = false;
+            lastNoteStep = step;
+        }
+
+        TlbSideNote note = null;
+        if (!sideNoteDismissed && step instanceof PageEvictionStep && context.didPageEvictionInvalidateTlbEntry())
+        {
+            note = new TlbSideNote("Invalidated entry", context.getPageEvictionVictimUser(), context.getPageEvictionVictimPage(),
+                    -1, context.getPageEvictionInvalidatedTlbTag(), context.wasPageEvictionInvalidatedTlbDirty(),
+                    context.getPageEvictionInvalidatedTlbBlock());
+        }
+        else if (!sideNoteDismissed && step instanceof PageTLBEvictionStep)
+        {
+            String headline = tlb instanceof DirectTLB ? "Replaced entry" : "Evicted entry";
+            // No decoded user/page here (sentinel -1): a direct/set-associative TLB stores a
+            // reduced tag with the index/set bits already stripped out, so decoding it the same
+            // way a fully-associative tag decodes would silently reconstruct the wrong page. The
+            // tag itself (shown in the row below) is still the entry's real, undecoded identity.
+            note = new TlbSideNote(headline, -1, -1, context.getEvictedTlbIndex(), context.getEvictedTlbTag(),
+                    context.wasEvictedTlbDirty(), context.getEvictedTlbBlock());
+        }
+        sideNote.set(note);
     }
 
     private static Set<TlbLine> linesFor(SimulationStep<? extends SimulationContext> step)

@@ -2,6 +2,7 @@ package rs.ac.bg.etf.model.simulation.step;
 
 import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.memory.Memory;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
 
 public abstract class MemoryAccessStep<T extends SimulationContext> extends SimulationStep<T> 
@@ -42,6 +43,7 @@ public abstract class MemoryAccessStep<T extends SimulationContext> extends Simu
                 break;
         }
 
+        setAffectedComponents(SimulationComponent.MEMORY);
         return nextStep();
     }
 

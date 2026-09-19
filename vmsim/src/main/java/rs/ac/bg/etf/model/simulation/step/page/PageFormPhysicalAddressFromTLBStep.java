@@ -1,6 +1,7 @@
 package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.FormPhysicalAddressFromTLBStep;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.tlb.TLBEntry;
@@ -22,6 +23,7 @@ public class PageFormPhysicalAddressFromTLBStep<T extends PageSimulationContext>
         context.setCurrentPhysicalAddress(physicalAddress);
         context.getCurrentInstruction().setPhysicalAddress(physicalAddress);
 
+        setAffectedComponents(SimulationComponent.TLB, SimulationComponent.MEMORY);
         return new PageMemoryAccessStep<T>(context);
     }
 

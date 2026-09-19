@@ -1,27 +1,24 @@
 package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.memory.Instruction;
-import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.TLBUpdateStep;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 import rs.ac.bg.etf.model.tlb.TLBEntry;
 
-public class PageTLBUpdateStep<T extends PageSimulationContext> extends TLBUpdateStep<T> 
+public class PageTLBUpdateStep<T extends PageSimulationContext> extends TLBUpdateStep<T>
 {
     private PageTableDescriptor descriptor;
-    private PageTableDescriptor evictedDescriptor;
-    private boolean descriptorWasDirty = false;
 
-    public PageTLBUpdateStep(T context, PageTableDescriptor descriptor) 
+    public PageTLBUpdateStep(T context, PageTableDescriptor descriptor)
     {
         super(context);
         this.descriptor = descriptor;
     }
 
     @Override
-    public TLBEntry getTLBEntry() 
+    public TLBEntry getTLBEntry()
     {
         Instruction instruction = context.getCurrentInstruction();
         int user = instruction.getUser();
@@ -32,31 +29,19 @@ public class PageTLBUpdateStep<T extends PageSimulationContext> extends TLBUpdat
     }
 
     @Override
-    public void writebackDirty() 
-    {
-        PageOSMemoryManager memoryManager = context.getOSMemoryManager();
-        evictedDescriptor = memoryManager.getFrameMapping(evicted.getBlock()).descriptor();
-
-        descriptorWasDirty = evictedDescriptor.isDirty();
-        evictedDescriptor.setDirty(true);
-    }
-
-    @Override
-    public SimulationStep<T> nextStep() 
+    public SimulationStep<T> nextStep()
     {
         return new PageMemoryAccessStep<T>(context);
     }
 
-    @Override
-    public void undo()
+    public static <U extends PageSimulationContext> SimulationStep<U> nextTlbStep(U context, PageTableDescriptor descriptor)
     {
-        super.undo();
+        int user = context.getCurrentInstruction().getUser();
+        long tag = context.getTLB().calculateTag(user, context.getPageComponent());
 
-        if (evicted != null)
-        {
-            evictedDescriptor.setDirty(descriptorWasDirty);
-        }
+        if (context.getTLB().wouldEvict(tag))
+            return new PageTLBEvictionStep<U>(context, descriptor);
+
+        return new PageTLBUpdateStep<U>(context, descriptor);
     }
-
-    
 }

@@ -26,6 +26,16 @@ public abstract class SimulationContext
     private int currentInstructionInd = -1;
     private long currentPhysicalAddress = -1;
 
+    // Identity of whichever entry TLBEvictionStep most recently evicted to make room for an
+    // insertion, set in its execute() and read by consumers (e.g. the TLB tab's notification
+    // side note) -- the entry itself stays in the TLB's own storage (just marked invalid), so its
+    // tag/block/index are readable directly from there too, but wasDirty specifically reflects its
+    // state at the moment of eviction, since the step itself clears the live entry's dirty flag.
+    private long evictedTlbTag = -1;
+    private long evictedTlbBlock = -1;
+    private boolean evictedTlbWasDirty = false;
+    private int evictedTlbIndex = -1;
+
     public SimulationContext(SimulationConfig config) 
     {
         this.config = config;
@@ -77,7 +87,35 @@ public abstract class SimulationContext
         this.currentPhysicalAddress = currentPhysicalAddress;
     }
 
-    
+    public void setEvictedTlbEntry(long tag, long block, boolean wasDirty, int index)
+    {
+        this.evictedTlbTag = tag;
+        this.evictedTlbBlock = block;
+        this.evictedTlbWasDirty = wasDirty;
+        this.evictedTlbIndex = index;
+    }
+
+    public long getEvictedTlbTag()
+    {
+        return evictedTlbTag;
+    }
+
+    public long getEvictedTlbBlock()
+    {
+        return evictedTlbBlock;
+    }
+
+    public boolean wasEvictedTlbDirty()
+    {
+        return evictedTlbWasDirty;
+    }
+
+    public int getEvictedTlbIndex()
+    {
+        return evictedTlbIndex;
+    }
+
+
     public TLB getTLB()
     {
         return tlb;

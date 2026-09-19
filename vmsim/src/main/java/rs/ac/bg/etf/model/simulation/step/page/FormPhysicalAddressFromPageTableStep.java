@@ -1,6 +1,7 @@
 package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
@@ -28,8 +29,9 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
 
         context.setCurrentPhysicalAddress(physicalAddress);
         context.getCurrentInstruction().setPhysicalAddress(physicalAddress);
-        
-        return new PageTLBUpdateStep<T>(context, descriptor);
+
+        setAffectedComponents(SimulationComponent.MMU, SimulationComponent.MEMORY);
+        return PageTLBUpdateStep.nextTlbStep(context, descriptor);
     }
     @Override
     public void undo() 

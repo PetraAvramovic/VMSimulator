@@ -95,19 +95,22 @@ public class SetAssociativeTLB extends TLB
         int setIdx = setIndexFor(entry.getTag());
         entry.setTag(toStoredTag(entry.getTag()));
 
-        // First, look for any empty slot in this set
+        // First, look for any free slot in this set -- either genuinely empty, or holding an
+        // entry a prior evictForInsertion() already invalidated in place -- and fill it
         for (int w = 0; w < entriesPerSet; w++)
         {
             int idx = slotFor(setIdx, w);
-            if (entries.get(idx) == null)
+            TLBEntry existing = entries.get(idx);
+            if (existing == null || !existing.isValid())
             {
                 entries.set(idx, entry);
-                pushInsertion(null, entry, idx);
-                return null;
+                pushInsertion(existing, entry, idx);
+                return existing;
             }
         }
 
-        // Set is full: use dumb pointer eviction within the set
+        // Set is full: use dumb pointer eviction within the set. Shouldn't happen once callers
+        // always run evictForInsertion() first, but kept as a defensive fallback.
         int victimWay = fifoPointerPerSet[setIdx] % entriesPerSet;
         int victimIndex = slotFor(setIdx, victimWay);
         TLBEntry evicted = entries.get(victimIndex);
@@ -124,16 +127,10 @@ public class SetAssociativeTLB extends TLB
         // Determine which set this position belongs to (way-major: set = position % numSets)
         int setIdx = record.position % numSets;
 
-        if (record.evictedEntry != null)
+        entries.set(record.position, record.evictedEntry);
+        if (record.secondaryPosition >= 0)
         {
-            // Eviction occurred: restore evicted entry and restore pointer to pre-eviction state
-            entries.set(record.position, record.evictedEntry);
             fifoPointerPerSet[setIdx] = record.secondaryPosition;
-        }
-        else
-        {
-            // No eviction: just clear the slot
-            entries.set(record.position, null);
         }
     }
 
@@ -160,6 +157,40 @@ public class SetAssociativeTLB extends TLB
     protected void restoreInvalidatedEntry(InvalidationRecord record)
     {
         entries.set(record.position, record.entry);
+    }
+
+    @Override
+    public boolean wouldEvict(long tag)
+    {
+        int setIdx = setIndexFor(tag);
+        for (int w = 0; w < entriesPerSet; w++)
+        {
+            TLBEntry existing = entries.get(slotFor(setIdx, w));
+            if (existing == null || !existing.isValid())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public TLBEntry evictForInsertion(long tag)
+    {
+        int setIdx = setIndexFor(tag);
+        int victimWay = fifoPointerPerSet[setIdx] % entriesPerSet;
+        int victimIndex = slotFor(setIdx, victimWay);
+        TLBEntry evicted = entries.get(victimIndex);
+        int oldPointer = fifoPointerPerSet[setIdx];
+        fifoPointerPerSet[setIdx]++;
+        pushEviction(setIdx, oldPointer);
+        return evicted;
+    }
+
+    @Override
+    protected void restoreEvictionPointer(EvictionRecord record)
+    {
+        fifoPointerPerSet[record.setIndex] = record.pointerValue;
     }
 
     @Override

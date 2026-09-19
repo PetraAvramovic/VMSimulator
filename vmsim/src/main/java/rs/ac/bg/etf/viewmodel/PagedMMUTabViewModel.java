@@ -8,8 +8,10 @@ import java.util.Set;
 
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.FXCollections;
@@ -21,7 +23,10 @@ import rs.ac.bg.etf.model.simulation.step.InstructionFetchStep;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.page.FormPageTableAddressStep;
 import rs.ac.bg.etf.model.simulation.step.page.FormPhysicalAddressFromPageTableStep;
+import rs.ac.bg.etf.model.simulation.step.page.PageEvictionStep;
+import rs.ac.bg.etf.model.simulation.step.page.PageTLBEvictionStep;
 import rs.ac.bg.etf.model.simulation.step.page.PageTableLookupStep;
+import rs.ac.bg.etf.model.simulation.step.page.PageTableUpdateDirtyBitStep;
 import rs.ac.bg.etf.model.table.PageTable;
 import rs.ac.bg.etf.model.table.PageTableDescriptor;
 import rs.ac.bg.etf.view.util.ValueConverter;
@@ -50,6 +55,11 @@ public class PagedMMUTabViewModel
 
     public record Row(long page, boolean valid, boolean dirty, long block, long disk, boolean current) {}
 
+    /** A page-table descriptor snapshot worth calling out because it changed off-window (not the
+     *  addressed page) or was otherwise flagged -- rendered to look like an actual table row, not
+     *  prose, so it reads as "here is the entry" rather than another step description. */
+    public record MmuSideNote(String headline, int user, long page, boolean valid, boolean dirty, long block, long disk) {}
+
     private final PageSimulationContext context;
     private final Simulation simulation;
     // Kept only so the full-table inspector window (opened from the view, not owned by this
@@ -72,6 +82,13 @@ public class PagedMMUTabViewModel
     private final StringProperty currentDiskHex = new SimpleStringProperty("/");
 
     private final Map<MmuLine, BooleanProperty> lineActive = new EnumMap<>(MmuLine.class);
+    // Notification card for a page-table descriptor change worth calling out explicitly -- null
+    // when there's nothing to show. Dismissible: dismissSideNote() hides it and it stays hidden
+    // for this same occurrence (tracked via lastNoteStep) until a genuinely different step
+    // produces a new one.
+    private final ObjectProperty<MmuSideNote> sideNote = new SimpleObjectProperty<>(null);
+    private SimulationStep<? extends SimulationContext> lastNoteStep = null;
+    private boolean sideNoteDismissed = false;
 
     // Bit widths are fixed for the lifetime of a simulation, so these are plain fields, not properties
     private final int pageBits;
@@ -143,9 +160,23 @@ public class PagedMMUTabViewModel
     }
 
     /** True once the page table has actually been looked up for the current instruction (row is resolved, not just guessed). */
-    public BooleanProperty pageTableAccessedProperty() 
+    public BooleanProperty pageTableAccessedProperty()
     {
         return lineActive.get(MmuLine.ADDER_TO_ROW);
+    }
+
+    /** Notification card describing a page-table descriptor change worth calling out; null when
+     *  there's nothing to show. */
+    public ObjectProperty<MmuSideNote> sideNoteProperty()
+    {
+        return sideNote;
+    }
+
+    /** Dismisses the current notification card; it stays hidden until a genuinely new occurrence. */
+    public void dismissSideNote()
+    {
+        sideNoteDismissed = true;
+        sideNote.set(null);
     }
 
     public StringProperty pageHexProperty() { return pageHex; }
@@ -235,7 +266,7 @@ public class PagedMMUTabViewModel
 
     // Walks executed steps back to (but excluding) the most recent instruction fetch, unioning
     // the connectors each step type touches, so wires "stay lit" for the rest of that instruction.
-    private void recomputeActiveLines() 
+    private void recomputeActiveLines()
     {
         Set<MmuLine> active = EnumSet.noneOf(MmuLine.class);
 
@@ -251,6 +282,58 @@ public class PagedMMUTabViewModel
 
         for (MmuLine line : MmuLine.values())
             lineActive.get(line).set(active.contains(line));
+
+        recomputeSideNote(history);
+    }
+
+    // Describes whatever page-table mutation the single current step just made -- scoped to that
+    // one step only (matching SimulationViewModel's tab-notification badge exactly, so the card
+    // always explains precisely why this tab is currently badged, no more and no less). A step
+    // producing a *different* card than last time is a new occurrence and clears any prior
+    // dismissal; re-seeing the same step (e.g. switching tabs and back with nothing new having
+    // run) respects it.
+    private void recomputeSideNote(List<SimulationStep<? extends SimulationContext>> history)
+    {
+        SimulationStep<? extends SimulationContext> step = history.isEmpty() ? null : history.get(history.size() - 1);
+        if (step != lastNoteStep)
+        {
+            sideNoteDismissed = false;
+            lastNoteStep = step;
+        }
+        sideNote.set(sideNoteDismissed ? null : sideNoteFor(step));
+    }
+
+    // Most of these mutate the *addressed* page's own descriptor, already visible as the
+    // highlighted row above; the card still spells it out explicitly rather than leaving the user
+    // to infer it, and PageEvictionStep/PageTLBEvictionStep's write-back cover the one case that's
+    // genuinely off-window: a victim/evicted entry belonging to a different page entirely. Values
+    // come from context fields those steps set in execute(), not from the step instances
+    // themselves -- the instanceof check here only identifies *which* card to build.
+    private MmuSideNote sideNoteFor(SimulationStep<? extends SimulationContext> step)
+    {
+        if (step instanceof PageTableUpdateDirtyBitStep)
+        {
+            int user = context.getCurrentInstruction().getUser();
+            return descriptorSideNote("Dirty bit set", user, context.getPageComponent());
+        }
+        if (step instanceof PageEvictionStep)
+        {
+            return descriptorSideNote("Invalidated entry", context.getPageEvictionVictimUser(), context.getPageEvictionVictimPage());
+        }
+        if (step instanceof PageTLBEvictionStep && context.getTlbWritebackUser() >= 0)
+        {
+            return descriptorSideNote("Dirty bit written back from TLB", context.getTlbWritebackUser(), context.getTlbWritebackPage());
+        }
+        return null;
+    }
+
+    // Reads the descriptor's current (post-mutation) field values directly from the model, rather
+    // than needing the step itself to carry them -- the step only needs to identify *which*
+    // descriptor, via (user, page).
+    private MmuSideNote descriptorSideNote(String headline, int user, long page)
+    {
+        PageTableDescriptor descriptor = context.getPageTable(user).getEntry(page);
+        return new MmuSideNote(headline, user, page, descriptor.isValid(), descriptor.isDirty(), descriptor.getBlock(), descriptor.getDisk());
     }
 
     private static Set<MmuLine> linesFor(SimulationStep<? extends SimulationContext> step) 

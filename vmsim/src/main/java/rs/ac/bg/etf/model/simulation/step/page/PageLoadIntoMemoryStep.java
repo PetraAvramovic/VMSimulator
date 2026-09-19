@@ -6,6 +6,7 @@ import rs.ac.bg.etf.model.disk.Disk;
 import rs.ac.bg.etf.model.memory.Memory;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
@@ -58,6 +59,7 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
         context.setCurrentFrame(frame);
         context.setCurrentLoadDiskAddress(diskAddress);
 
+        setAffectedComponents(SimulationComponent.OS, SimulationComponent.MMU, SimulationComponent.MEMORY);
         return new FormPhysicalAddressFromPageTableStep<T>(context, descriptor);
     }
 

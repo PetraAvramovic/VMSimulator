@@ -1,6 +1,7 @@
 package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
@@ -22,6 +23,7 @@ public class FormPageTableAddressStep<T extends PageSimulationContext> extends S
 
         context.setCurrentDescriptorAddress(ptp + offset);
 
+        setAffectedComponents(SimulationComponent.MMU);
         return new PageTableLookupStep<T>(context);
     }
 

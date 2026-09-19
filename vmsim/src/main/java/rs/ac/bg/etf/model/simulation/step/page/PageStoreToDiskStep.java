@@ -5,6 +5,7 @@ import java.util.SortedMap;
 import rs.ac.bg.etf.model.disk.Disk;
 import rs.ac.bg.etf.model.memory.Memory;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
@@ -35,6 +36,7 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
         disk.writeBlock(diskAddress, block);
         descriptor.setDirty(false);
 
+        setAffectedComponents(SimulationComponent.OS);
         return new PageLoadIntoMemoryStep<T>(context, frame);
     }
 

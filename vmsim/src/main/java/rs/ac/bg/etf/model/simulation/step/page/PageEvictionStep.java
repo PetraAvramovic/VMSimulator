@@ -4,6 +4,7 @@ import rs.ac.bg.etf.model.os.EvictionPolicy;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager.FrameMapping;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
@@ -42,6 +43,16 @@ public class PageEvictionStep<T extends PageSimulationContext> extends Simulatio
 
         if (tlbEntry != null)
             victimDescriptor.setDirty(tlbEntry.isDirty());
+
+        context.setPageEvictionVictim(victimFrameMapping.user(), victimFrameMapping.page(), victimFrame);
+        context.setPageEvictionInvalidatedTlbEntry(tlbEntry != null,
+                tlbEntry != null ? tlbEntry.getTag() : -1,
+                tlbEntry != null ? tlbEntry.getBlock() : -1,
+                tlbEntry != null && tlbEntry.isDirty());
+
+        setAffectedComponents(tlbEntry != null
+                ? new SimulationComponent[] { SimulationComponent.OS, SimulationComponent.MMU, SimulationComponent.TLB }
+                : new SimulationComponent[] { SimulationComponent.OS, SimulationComponent.MMU });
 
         if (victimDescriptor.isDirty())
             return new PageStoreToDiskStep<T>(context, victimDescriptor);

@@ -1,5 +1,6 @@
 package rs.ac.bg.etf.model.simulation.step;
 
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
 import rs.ac.bg.etf.model.tlb.TLBEntry;
 
@@ -20,6 +21,7 @@ public abstract class TLBUpdateDirtyBitStep<T extends SimulationContext> extends
     {
         tlbEntry.setDirty(true);
 
+        setAffectedComponents(SimulationComponent.TLB);
         return nexStep();
     }
 

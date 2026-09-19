@@ -43,7 +43,7 @@ public class App extends Application {
         handleScreenTransition(ApplicationScreenState.MAIN_MENU);
     
 
-        Scene scene = new Scene(rootViewportBox, 1024, 680);
+        Scene scene = new Scene(rootViewportBox, 1024, 760);
 
         String cssPath = getClass().getResource("light-theme.css").toExternalForm();
         scene.getStylesheets().add(cssPath);
@@ -51,7 +51,7 @@ public class App extends Application {
         stage.setScene(scene);
 
         stage.setMinWidth(800);
-        stage.setMinHeight(600);
+        stage.setMinHeight(680);
 
         stage.show();
         

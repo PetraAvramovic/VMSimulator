@@ -1,9 +1,15 @@
 package rs.ac.bg.etf.viewmodel;
 
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -12,7 +18,9 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.simulation.Simulation;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
+import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.viewmodel.listeners.SimulationNavigationListener;
@@ -48,6 +56,20 @@ public class SimulationViewModel
     /** Row index into {@link #instructionEntries} of the instruction currently being executed, or -1. */
     private final IntegerProperty currentInstructionIndex = new SimpleIntegerProperty(-1);
 
+    // Which tab is currently focused (fed by the view from its TabPane selection), and, per
+    // component, whether its badge should show right now. A badge is only ever eligible while its
+    // component is still within the "steps since the last instruction fetch" window (the same
+    // window PagedMMUTabViewModel/PagedTLBTabViewModel's recomputeActiveLines() use) -- it clears
+    // on its own once that window moves past it, same as those wires do. Independently, the
+    // moment the user actually focuses a tab while it's eligible, that specific occurrence is
+    // acknowledged and won't reappear just from switching away and back -- but a genuinely new
+    // occurrence (the window going from "not touching this component" to "touching it" again)
+    // overrides that and shows a fresh badge regardless. See updateTabNotifications().
+    private final ObjectProperty<SimulationComponent> selectedComponent = new SimpleObjectProperty<>(null);
+    private final Map<SimulationComponent, BooleanProperty> tabNotifications = new EnumMap<>(SimulationComponent.class);
+    private final EnumSet<SimulationComponent> currentlyRelevant = EnumSet.noneOf(SimulationComponent.class);
+    private final EnumSet<SimulationComponent> acknowledged = EnumSet.noneOf(SimulationComponent.class);
+
     public SimulationViewModel(Simulation simulation, SimulationNavigationListener navigationListener)
     {
         this.simulation = simulation;
@@ -55,6 +77,16 @@ public class SimulationViewModel
         this.navigationListener = navigationListener;
 
         instructionEntries.addAll(context.getInstructions());
+
+        for (SimulationComponent component : SimulationComponent.values())
+            tabNotifications.put(component, new SimpleBooleanProperty(false));
+        // Focusing a tab acknowledges whatever occurrence is currently relevant to it (if any) --
+        // updateTabNotifications() is what actually raises a *new* occurrence back up regardless.
+        selectedComponent.addListener((obs, old, sel) -> {
+            if (sel != null)
+                acknowledged.add(sel);
+            refreshTabNotificationVisibility();
+        });
     }
 
     /** Leaves the workbench and returns to the main menu; the simulation stays alive to resume. */
@@ -105,6 +137,19 @@ public class SimulationViewModel
     public IntegerProperty currentInstructionIndexProperty()
     {
         return currentInstructionIndex;
+    }
+
+    /** The tab the view currently has focused; the view is responsible for keeping this in sync
+     *  with its TabPane selection. */
+    public ObjectProperty<SimulationComponent> selectedComponentProperty()
+    {
+        return selectedComponent;
+    }
+
+    /** True while {@code component} was touched by the current step and isn't the focused tab. */
+    public BooleanProperty tabNotificationProperty(SimulationComponent component)
+    {
+        return tabNotifications.get(component);
     }
 
     public SimulationContext getContext() 
@@ -257,6 +302,54 @@ public class SimulationViewModel
     {
         currentStepNumber.set(simulation.getCurrentStepNum());
         refreshAddressDisplays();
+        updateTabNotifications();
+    }
+
+    /**
+     * Recomputes which components are relevant right now -- exactly the affected components of
+     * whichever single step is currently on top of the step history (the current step only, not
+     * an instruction-wide window: unlike the MMU/TLB wires' recomputeActiveLines(), a badge is
+     * about "what did *this* step just do," not "what's happened so far this instruction") --
+     * then reconciles that against what was relevant last time: a component that just became
+     * relevant (it wasn't a moment ago) is a *new* occurrence and un-acknowledges it, so its badge
+     * shows even if the user had previously dismissed an earlier occurrence for that same tab. A
+     * component that stops being relevant (the very next step, whatever it is, doesn't touch it)
+     * simply stops showing, on its own -- no per-tab bookkeeping needed for that direction, since
+     * the badge is gated on {@code currentlyRelevant} either way.
+     *
+     * If the newly relevant component is the one currently focused, it's marked acknowledged
+     * immediately: the user is watching it happen live, so there's nothing to notify about, and
+     * without this, moving focus away afterward would otherwise surface a notification for an
+     * occurrence they'd already seen (the sole reason it wasn't showing until then was
+     * "focused," which stops applying the moment focus moves elsewhere).
+     */
+    private void updateTabNotifications()
+    {
+        EnumSet<SimulationComponent> relevant = EnumSet.noneOf(SimulationComponent.class);
+        List<SimulationStep<? extends SimulationContext>> history = simulation.getExecutedSteps();
+        if (!history.isEmpty())
+            relevant.addAll(history.get(history.size() - 1).getAffectedComponents());
+
+        for (SimulationComponent component : SimulationComponent.values())
+            if (relevant.contains(component) != currentlyRelevant.contains(component))
+                acknowledged.remove(component);
+        currentlyRelevant.clear();
+        currentlyRelevant.addAll(relevant);
+
+        SimulationComponent focused = selectedComponent.get();
+        if (focused != null && currentlyRelevant.contains(focused))
+            acknowledged.add(focused);
+
+        refreshTabNotificationVisibility();
+    }
+
+    /** Badge = relevant right now, not the focused tab (already visible there), not acknowledged. */
+    private void refreshTabNotificationVisibility()
+    {
+        SimulationComponent focused = selectedComponent.get();
+        for (SimulationComponent component : SimulationComponent.values())
+            tabNotifications.get(component).set(
+                    currentlyRelevant.contains(component) && component != focused && !acknowledged.contains(component));
     }
 
     private void refreshAddressDisplays()

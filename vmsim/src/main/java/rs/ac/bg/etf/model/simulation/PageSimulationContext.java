@@ -29,7 +29,24 @@ public class PageSimulationContext extends SimulationContext
     // this instruction's load step is still the active one.
     private long currentLoadDiskAddress = -1;
 
-    public PageSimulationContext(SimulationConfig config) 
+    // Identity of whichever frame/page PageEvictionStep most recently evicted, and whether that
+    // also invalidated a TLB entry -- set in its execute(), read by consumers (e.g. the MMU/TLB
+    // tabs' notification side notes).
+    private int pageEvictionVictimUser = -1;
+    private long pageEvictionVictimPage = -1;
+    private long pageEvictionVictimFrame = -1;
+    private boolean pageEvictionInvalidatedTlbEntry = false;
+    private long pageEvictionInvalidatedTlbTag = -1;
+    private long pageEvictionInvalidatedTlbBlock = -1;
+    private boolean pageEvictionInvalidatedTlbWasDirty = false;
+
+    // Identity of whichever evicted entry's descriptor PageTLBUpdateStep's dirty write-back most
+    // recently targeted, set in its execute(), read by consumers (e.g. the MMU tab's notification
+    // side note).
+    private int tlbWritebackUser = -1;
+    private long tlbWritebackPage = -1;
+
+    public PageSimulationContext(SimulationConfig config)
     {
         super(config);
     }
@@ -200,6 +217,72 @@ public class PageSimulationContext extends SimulationContext
     public void setCurrentLoadDiskAddress(long currentLoadDiskAddress)
     {
         this.currentLoadDiskAddress = currentLoadDiskAddress;
+    }
+
+    public void setPageEvictionVictim(int user, long page, long frame)
+    {
+        this.pageEvictionVictimUser = user;
+        this.pageEvictionVictimPage = page;
+        this.pageEvictionVictimFrame = frame;
+    }
+
+    public int getPageEvictionVictimUser()
+    {
+        return pageEvictionVictimUser;
+    }
+
+    public long getPageEvictionVictimPage()
+    {
+        return pageEvictionVictimPage;
+    }
+
+    public long getPageEvictionVictimFrame()
+    {
+        return pageEvictionVictimFrame;
+    }
+
+    public void setPageEvictionInvalidatedTlbEntry(boolean invalidated, long tag, long block, boolean wasDirty)
+    {
+        this.pageEvictionInvalidatedTlbEntry = invalidated;
+        this.pageEvictionInvalidatedTlbTag = tag;
+        this.pageEvictionInvalidatedTlbBlock = block;
+        this.pageEvictionInvalidatedTlbWasDirty = wasDirty;
+    }
+
+    public boolean didPageEvictionInvalidateTlbEntry()
+    {
+        return pageEvictionInvalidatedTlbEntry;
+    }
+
+    public long getPageEvictionInvalidatedTlbTag()
+    {
+        return pageEvictionInvalidatedTlbTag;
+    }
+
+    public long getPageEvictionInvalidatedTlbBlock()
+    {
+        return pageEvictionInvalidatedTlbBlock;
+    }
+
+    public boolean wasPageEvictionInvalidatedTlbDirty()
+    {
+        return pageEvictionInvalidatedTlbWasDirty;
+    }
+
+    public void setTlbWritebackVictim(int user, long page)
+    {
+        this.tlbWritebackUser = user;
+        this.tlbWritebackPage = page;
+    }
+
+    public int getTlbWritebackUser()
+    {
+        return tlbWritebackUser;
+    }
+
+    public long getTlbWritebackPage()
+    {
+        return tlbWritebackPage;
     }
 
     public PageTable getPageTable(int user)

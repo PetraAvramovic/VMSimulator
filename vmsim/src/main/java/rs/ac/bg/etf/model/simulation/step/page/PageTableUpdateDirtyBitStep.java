@@ -1,6 +1,7 @@
 package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
@@ -21,6 +22,7 @@ public class PageTableUpdateDirtyBitStep<T extends PageSimulationContext> extend
     {
         descriptor.setDirty(true);
 
+        setAffectedComponents(SimulationComponent.MMU);
         return new FormPhysicalAddressFromPageTableStep<T>(context, descriptor);
     }
 
@@ -36,5 +38,4 @@ public class PageTableUpdateDirtyBitStep<T extends PageSimulationContext> extend
         return new StepDescription(StepDescriptionKey.PAGE_TABLE_DIRTY_BIT_UPDATED, descriptor.getPage());
     }
 
-    
 }

@@ -650,6 +650,16 @@
     -fx-max-width: 500px;
 }
 
+/* Zeroes out the default gap a Tab's header reserves between its graphic and its text -- needed
+   because SimulationView.attachNotificationBadge only attaches/detaches the whole notification-dot
+   node (rather than trying to shrink it to nothing while inactive), so once it IS attached, this
+   class's own default spacing would otherwise stack on top of the gap already sized into the dot's
+   own slot. Scoped by class name, not by any ancestor selector, but this app has exactly one
+   TabPane, so nothing else is affected. */
+.tab-label {
+    -fx-graphic-text-gap: 0;
+}
+
 .step-counter-label {
     -fx-font-weight: bold;
     -fx-font-size: 15px;
@@ -1118,6 +1128,50 @@
     -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
     -fx-font-size: 11px;
     -fx-text-fill: #7f8c8d;
+}
+
+/* MMU/TLB tab off-window side-effect notification (an evicted/victim entry's descriptor or TLB
+   entry changing, which the addressed-key window has no row to show). A visibly bordered, tinted
+   card -- unlike a plain white panel, this reads as an alert rather than blending into the tab's
+   own grey background -- wrapping a small .page-table-view/.page-table-header/.page-table-row
+   table of its own (built the exact same way the real tables are: same shared .page-table-cell
+   class), so the entry it describes reads as an actual table row, not a line of prose. Blue
+   accent (the same blue/light-blue pair as .page-table-row-current's own highlight) matches the
+   tab-header notification dot this card is explaining. */
+.side-effect-note-card {
+    -fx-background-color: #eaf4fc;
+    -fx-border-color: #3498db;
+    -fx-border-width: 2px;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-padding: 10px;
+}
+
+.side-effect-note-headline {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2980b9;
+}
+
+.side-effect-note-user {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #7f8c8d;
+}
+
+/* Acknowledge-and-dismiss control -- plain and small until hovered, so it doesn't compete with
+   the headline for attention, but is still clearly clickable. */
+.side-effect-note-dismiss {
+    -fx-background-color: transparent;
+    -fx-text-fill: #7f8c8d;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 4px 0 4px;
+    -fx-cursor: hand;
+}
+
+.side-effect-note-dismiss:hover {
+    -fx-text-fill: #3498db;
 }
 
 /* Captions riding the disk <-> frame wires ("load page" / "write back"). */

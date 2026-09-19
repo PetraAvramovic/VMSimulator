@@ -1,7 +1,10 @@
 package rs.ac.bg.etf.view;
 
+import java.util.Map;
+
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ChangeListener;
@@ -25,9 +28,13 @@ import javafx.scene.control.TabPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.view.tlb.PagedTLBTabView;
 import rs.ac.bg.etf.view.util.BackButton;
@@ -47,6 +54,13 @@ public class SimulationView {
     // Logical drag limits so a sidebar can never swallow the whole workbench or collapse to nothing
     private static final double SIDEBAR_MIN_WIDTH = 200;
     private static final double SIDEBAR_MAX_WIDTH = 420;
+    // Circle's own CSS radius property isn't reliable for sizing (PagedMMUTabView's adder circle
+    // sets its radius the same way, in code, and only styles fill/stroke via CSS -- see
+    // .mmu-adder-circle), so the tab notification dot's size lives here instead of in CSS.
+    private static final double TAB_NOTIFICATION_BADGE_RADIUS = 4;
+    // Breathing room between the dot and the tab text that follows it, reserved only while the
+    // badge is actually showing.
+    private static final double TAB_NOTIFICATION_BADGE_GAP = 6;
     // The instruction list's Index column has no configured upper bound (an instruction file can be
     // any length), so its width is reserved for this many digits rather than measured from the
     // actual (possibly much shorter) instruction list -- otherwise a short test file sizes the
@@ -323,7 +337,40 @@ public class SimulationView {
         Tab memoryTab = new Tab("Memory", buildMemoryTabContent(viewModel));
 
         tabPane.getTabs().addAll(mmuTab, tlbTab, osTab, memoryTab);
+
+        Map<Tab, SimulationComponent> tabComponents = Map.of(
+                mmuTab, SimulationComponent.MMU, tlbTab, SimulationComponent.TLB,
+                osTab, SimulationComponent.OS, memoryTab, SimulationComponent.MEMORY);
+
+        // First (and only) place tab selection is tracked anywhere in this app -- the badges below
+        // are the reason it's needed: a focused tab must never show its own notification.
+        tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) ->
+                viewModel.selectedComponentProperty().set(tabComponents.get(newTab)));
+        viewModel.selectedComponentProperty().set(tabComponents.get(tabPane.getSelectionModel().getSelectedItem()));
+
+        tabComponents.forEach((tab, component) -> attachNotificationBadge(tab, viewModel, component));
+
         return tabPane;
+    }
+
+    // Tab.setGraphic() is a plain, synchronous, first-class API -- no skin timing to work around --
+    // but the moment *any* graphic is set, the tab's internal header Label reserves its own
+    // -fx-graphic-text-gap next to the text, even for a graphic that reports zero width. So an
+    // unaffected tab's text only ever sits exactly where it would with no badge feature at all if
+    // the graphic isn't set there in the first place -- hence attaching/detaching the whole node
+    // rather than trying to shrink it to nothing while inactive.
+    private void attachNotificationBadge(Tab tab, SimulationViewModel viewModel, SimulationComponent component) {
+        Circle badge = new Circle(TAB_NOTIFICATION_BADGE_RADIUS, Color.web("#3498db"));
+        double slotSize = TAB_NOTIFICATION_BADGE_RADIUS * 2 + TAB_NOTIFICATION_BADGE_GAP;
+        StackPane badgeSlot = new StackPane(badge);
+        badgeSlot.setMinSize(slotSize, TAB_NOTIFICATION_BADGE_RADIUS * 2);
+        badgeSlot.setPrefSize(slotSize, TAB_NOTIFICATION_BADGE_RADIUS * 2);
+        badgeSlot.setMaxSize(slotSize, TAB_NOTIFICATION_BADGE_RADIUS * 2);
+
+        BooleanProperty notified = viewModel.tabNotificationProperty(component);
+        Runnable syncGraphic = () -> tab.setGraphic(notified.get() ? badgeSlot : null);
+        notified.addListener((o, ov, nv) -> syncGraphic.run());
+        syncGraphic.run();
     }
 
     private Node buildMemoryTabContent(SimulationViewModel viewModel) {

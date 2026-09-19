@@ -1,70 +1,38 @@
 package rs.ac.bg.etf.model.simulation.step;
 
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
-import rs.ac.bg.etf.model.tlb.TLB;
 import rs.ac.bg.etf.model.tlb.TLBEntry;
 
-public abstract class TLBUpdateStep<T extends SimulationContext> extends SimulationStep<T> 
+public abstract class TLBUpdateStep<T extends SimulationContext> extends SimulationStep<T>
 {
-    protected TLBEntry evicted;
-    private boolean wasDirty = false;
-
-    protected TLBUpdateStep(T context) 
+    protected TLBUpdateStep(T context)
     {
         super(context);
     }
-    
+
     public abstract TLBEntry getTLBEntry();
-    public abstract void writebackDirty();
     public abstract SimulationStep<T> nextStep();
 
     @Override
-    public SimulationStep<T> execute() 
+    public SimulationStep<T> execute()
     {
         TLBEntry entry = getTLBEntry();
-        TLB tlb = context.getTLB();
-       
-        evicted = tlb.insert(entry);
+        context.getTLB().insert(entry);
 
-        if (evicted != null)
-        {
-            evicted.setValid(false);
-            if (evicted.isDirty())
-            {
-                wasDirty = true;
-                evicted.setDirty(false);
-                writebackDirty();
-        
-            }
-        } 
-
+        setAffectedComponents(SimulationComponent.TLB);
         return nextStep();
     }
 
     @Override
-    public void undo() 
+    public void undo()
     {
-       TLB tlb = context.getTLB();
-
-        if (evicted != null)
-        {
-            evicted.setValid(true);
-            evicted.setDirty(wasDirty);
-        }
-            
-       tlb.undoInsertion();
+        context.getTLB().undoInsertion();
     }
 
     @Override
     public StepDescription getStepDescription()
     {
-        if (evicted == null)
-            return new StepDescription(StepDescriptionKey.TLB_INSERTED);
-
-        return wasDirty
-                ? new StepDescription(StepDescriptionKey.TLB_INSERTED_EVICTED_DIRTY)
-                : new StepDescription(StepDescriptionKey.TLB_INSERTED_EVICTED_CLEAN);
+        return new StepDescription(StepDescriptionKey.TLB_INSERTED);
     }
-
-    
 }

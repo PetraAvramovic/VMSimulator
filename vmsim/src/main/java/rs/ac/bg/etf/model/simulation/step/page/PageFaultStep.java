@@ -2,6 +2,7 @@ package rs.ac.bg.etf.model.simulation.step.page;
 
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.model.simulation.step.StepDescriptionKey;
@@ -25,6 +26,7 @@ public class PageFaultStep<T extends PageSimulationContext> extends SimulationSt
         frame = memoryManager.getFreeFrame();
         context.setCurrentDescriptor(descriptor);
 
+        setAffectedComponents(SimulationComponent.OS);
         if (frame == -1)
             return new PageEvictionStep<T>(context);
         else
