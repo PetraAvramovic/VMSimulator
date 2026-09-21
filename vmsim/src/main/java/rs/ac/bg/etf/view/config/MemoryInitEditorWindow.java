@@ -9,7 +9,7 @@ import javafx.stage.Window;
 import rs.ac.bg.etf.viewmodel.MemoryInitEntry;
 
 /**
- * Editor window for the config screen's "Initial Memory Content" section: word values pre-loaded
+ * Editor window for the config screen's "Initial Page Content" section: word values pre-loaded
  * at specific offsets of a user's page. Only takes effect for a page whose Page Table entry is
  * valid (see {@link PageTablesEditorWindow}) -- content for an invalid page seeds the disk instead,
  * per {@code SimulationConfig.getDiskInitContent}. Lazily built and toggled open/closed like the
@@ -54,8 +54,8 @@ public class MemoryInitEditorWindow
 
         return ConfigEditorWindowSupport.build(
                 owner,
-                "Initial Memory Content Editor",
-                "Initial Memory Content",
+                "Initial Page Content Editor",
+                "Initial Page Content",
                 "Word values pre-loaded at specific offsets of a user's page (applied only if that page's Page Table entry is valid).",
                 entries,
                 columns,

@@ -31,4 +31,11 @@ public interface TLBBodyView {
 
     /** Lights the body view's search wiring while the lookup step is the active one. */
     BooleanProperty activeProperty();
+
+    /**
+     * Moves the anchor markers to match the current layout right now, instead of waiting for the
+     * body view's own deferred job. The tab view routes its wires to those markers, and the two
+     * deferred jobs run in no guaranteed order, so the tab calls this before reading them.
+     */
+    void syncAnchors();
 }

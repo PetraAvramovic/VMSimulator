@@ -7,7 +7,6 @@ import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
 import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
-import javafx.application.Platform;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
@@ -23,6 +22,8 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import rs.ac.bg.etf.view.util.AddressScaleScrollBar;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel;
@@ -41,23 +42,29 @@ import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel.FrameState;
  */
 public class FrameTableView extends VBox
 {
-    // Drawn at WidthCalculator.LARGE_CELL_FONT_SIZE (the ".page-table-inline" marker on the root
-    // below applies that font size to every ".page-table-cell" in this table via CSS, the same
+    // Drawn at WidthCalculator.LARGE_CELL_FONT_SIZE (the ".data-table-schematic" marker on the root
+    // below applies that font size to every ".data-table-cell" in this table via CSS, the same
     // mechanism PageTableView/the TLB tables use for their own enlarged rows) -- physically bigger
     // cells, not more of them; VISIBLE_ROWS stays independent of that.
-    public static final double ROW_HEIGHT = 36;
     public static final int VISIBLE_ROWS = 12;
-
-    private static final double SWATCH_WIDTH = 30;
-    private static final double STATE_WIDTH = 112;
-    private static final double USER_WIDTH = 64;
-    private static final double PAGE_WIDTH = 72;
-    // Same column width PageTableView's own V/D columns use at this font size.
-    private static final double BIT_WIDTH = WidthCalculator.LARGE_BIT_COL_WIDTH;
-    private static final double PANEL_PAD = 8;   // matches .frame-table-view -fx-padding
-    private static final double BAR_WIDTH = 12;
-    private static final double SEEK_BAR_HEIGHT = 38;
     private static final int WHEEL_STEP = 3;
+
+    // Design-size lengths, scaled to the UI scale this table is built at (the screen is rebuilt when
+    // the scale changes, so they are fixed for this instance's lifetime -- hence instance fields).
+    private final double ROW_HEIGHT = UiScale.px(36);
+    private final double SWATCH_WIDTH = UiScale.px(30);
+    private final double STATE_WIDTH = UiScale.px(112);
+    private final double USER_WIDTH = UiScale.px(64);
+    private final double PAGE_WIDTH = UiScale.px(72);
+    // Same column width PageTableView's own V/D columns use at this font size.
+    private final double BIT_WIDTH = WidthCalculator.largeBitColumnWidth();
+    private final double PANEL_PAD = UiScale.px(8);   // matches .frame-table-view -fx-padding
+    private final double BAR_WIDTH = UiScale.px(12);
+    private final double SEEK_BAR_HEIGHT = UiScale.px(38);
+    private final double SEEK_BAR_SPACING = UiScale.px(8);
+    // Slack the panel's borders/row dividers add beyond the padded content.
+    private final double PANEL_EXTRA_WIDTH = UiScale.px(4);
+    private final double PANEL_EXTRA_HEIGHT = UiScale.px(6);
     /** How long a successful "Seek frame" keeps its landed-on row accented. */
     private static final Duration FOUND_HIGHLIGHT_DURATION = Duration.seconds(2.5);
     /** One dim<->bright cycle of the found-row border's pulse -- gentle breathing, not a flicker. */
@@ -82,6 +89,8 @@ public class FrameTableView extends VBox
     private final Label seekStatus = new Label();
     private final ObjectProperty<Region> activeRowAnchor = new SimpleObjectProperty<>();
     private final PauseTransition foundHighlightTimer = new PauseTransition(FOUND_HIGHLIGHT_DURATION);
+    // Rendered after the layout pass (merged when asked for several times) rather than a frame later.
+    private final PostLayoutTask renderTask = new PostLayoutTask(this, this::render, false);
 
     private boolean syncingScrollBar = false;
     // The frame a successful seek landed on, accented for FOUND_HIGHLIGHT_DURATION; matched by
@@ -95,7 +104,7 @@ public class FrameTableView extends VBox
         this.frameCount = Math.max(1, viewModel.getFrameCount());
         this.rowsShown = (int) Math.min(frameCount, VISIBLE_ROWS);
         this.scrolls = frameCount > rowsShown;
-        getStyleClass().addAll("frame-table-view", "page-table-inline");
+        getStyleClass().addAll("frame-table-view", "data-table-schematic");
         setFocusTraversable(true);
         foundHighlightTimer.setOnFinished(e -> { foundFrame = -1; render(); });
 
@@ -105,15 +114,15 @@ public class FrameTableView extends VBox
 
         double contentW = SWATCH_WIDTH + frameWidth() + STATE_WIDTH + USER_WIDTH + PAGE_WIDTH
                 + 2 * BIT_WIDTH + diskWidth();
-        double width = contentW + (scrolls ? BAR_WIDTH : 0) + 2 * PANEL_PAD + 4;
-        double height = SEEK_BAR_HEIGHT + ROW_HEIGHT * (rowsShown + 1) + 2 * PANEL_PAD + 6;
+        double width = contentW + (scrolls ? BAR_WIDTH : 0) + 2 * PANEL_PAD + PANEL_EXTRA_WIDTH;
+        double height = SEEK_BAR_HEIGHT + ROW_HEIGHT * (rowsShown + 1) + 2 * PANEL_PAD + PANEL_EXTRA_HEIGHT;
         setPrefSize(width, height);
         setMinSize(width, height);
         setMaxSize(width, height);
 
-        viewModel.windowStartProperty().addListener((o, ov, nv) -> Platform.runLater(this::render));
-        viewModel.framesRevisionProperty().addListener((o, ov, nv) -> Platform.runLater(this::render));
-        Platform.runLater(this::render);
+        viewModel.windowStartProperty().addListener((o, ov, nv) -> renderTask.request());
+        viewModel.framesRevisionProperty().addListener((o, ov, nv) -> renderTask.request());
+        renderTask.request();
     }
 
     /** Full rendered height of the panel. */
@@ -137,19 +146,19 @@ public class FrameTableView extends VBox
     private HBox buildSeekBar()
     {
         Label label = new Label("Seek frame");
-        label.getStyleClass().add("page-table-cell");
-        seekField.getStyleClass().add("os-frame-seek");
+        label.getStyleClass().add("data-table-cell");
+        seekField.getStyleClass().add("data-table-seek-field");
         seekField.setPromptText("0x… or decimal");
         seekField.setPrefColumnCount(9);
         seekField.setOnAction(e -> seek());
         seekField.textProperty().addListener((o, ov, nv) -> {
-            seekField.getStyleClass().remove("os-frame-seek-error");
+            seekField.getStyleClass().remove("data-table-seek-error");
             seekStatus.setText("");
         });
-        seekStatus.getStyleClass().add("os-disk-summary");
+        seekStatus.getStyleClass().add("status-caption");
 
-        HBox bar = new HBox(8, label, seekField, seekStatus);
-        bar.getStyleClass().add("os-frame-seek-bar");
+        HBox bar = new HBox(SEEK_BAR_SPACING, label, seekField, seekStatus);
+        bar.getStyleClass().add("data-table-seek-bar");
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMinHeight(SEEK_BAR_HEIGHT);
         bar.setPrefHeight(SEEK_BAR_HEIGHT);
@@ -161,7 +170,7 @@ public class FrameTableView extends VBox
     private HBox buildHeader()
     {
         HBox header = new HBox();
-        header.getStyleClass().add("frame-table-header");
+        header.getStyleClass().add("data-table-header-muted");
         header.setPrefHeight(ROW_HEIGHT);
         header.setPadding(new Insets(0, scrolls ? BAR_WIDTH : 0, 0, 0));
         header.getChildren().addAll(
@@ -247,7 +256,7 @@ public class FrameTableView extends VBox
             flagSeekError("out of range (0 .. " + ValueConverter.toHex(frameCount - 1, viewModel.frameHexDigitsProperty().get()) + ")");
             return;
         }
-        seekField.getStyleClass().remove("os-frame-seek-error");
+        seekField.getStyleClass().remove("data-table-seek-error");
         seekStatus.setText("");
         foundFrame = target;
         foundHighlightTimer.playFromStart();
@@ -255,13 +264,13 @@ public class FrameTableView extends VBox
         // centerWindowOn() only actually moves windowStart (and so only triggers a render via
         // that listener) if the target isn't already centred -- re-seeking the same frame after
         // its glow has already cleared would otherwise never re-render, so force one explicitly.
-        Platform.runLater(this::render);
+        renderTask.request();
     }
 
     private void flagSeekError(String message)
     {
-        if (!seekField.getStyleClass().contains("os-frame-seek-error"))
-            seekField.getStyleClass().add("os-frame-seek-error");
+        if (!seekField.getStyleClass().contains("data-table-seek-error"))
+            seekField.getStyleClass().add("data-table-seek-error");
         seekStatus.setText(message);
     }
 
@@ -298,7 +307,7 @@ public class FrameTableView extends VBox
     private Label headerCell(String text, double width)
     {
         Label label = new Label(text);
-        label.getStyleClass().add("page-table-cell");
+        label.getStyleClass().add("data-table-cell");
         label.setPrefWidth(width);
         label.setAlignment(Pos.CENTER);
         return label;
@@ -320,11 +329,11 @@ public class FrameTableView extends VBox
     {
         return switch (state)
         {
-            case FREE -> "os-frame-free";
-            case ALLOCATED -> "os-frame-allocated";
-            case KERNEL -> "os-frame-kernel";
-            case VICTIM -> "os-frame-victim";
-            case EVICTING -> "os-frame-evicting";
+            case FREE -> "frame-swatch-free";
+            case ALLOCATED -> "frame-swatch-allocated";
+            case KERNEL -> "frame-swatch-kernel";
+            case VICTIM -> "frame-swatch-victim";
+            case EVICTING -> "frame-swatch-evicting";
         };
     }
 
@@ -357,7 +366,7 @@ public class FrameTableView extends VBox
             foundBorder.getStyleClass().add("frame-table-row-found");
             foundBorder.setMouseTransparent(true);
             foundBorder.setVisible(false);
-            swatch.getStyleClass().add("os-frame-swatch");
+            swatch.getStyleClass().add("frame-swatch");
             swatch.setAlignment(Pos.CENTER);
             swatch.setMinSize(SWATCH_WIDTH, ROW_HEIGHT);
             swatch.setPrefSize(SWATCH_WIDTH, ROW_HEIGHT);
@@ -368,7 +377,7 @@ public class FrameTableView extends VBox
         {
             box.setVisible(true);
             box.setManaged(true);
-            content.getStyleClass().removeAll("frame-table-row-active", "os-row-victim", "os-row-evicting");
+            content.getStyleClass().removeAll("frame-table-row-active", "frame-table-row-victim", "frame-table-row-evicting");
 
             frame.setText(ValueConverter.toHex(row.frame(), viewModel.frameHexDigitsProperty().get()));
             frame.setPrefWidth(frameWidth());
@@ -383,14 +392,14 @@ public class FrameTableView extends VBox
             disk.setPrefWidth(diskWidth());
 
             swatch.getStyleClass().removeAll(
-                    "os-frame-free", "os-frame-allocated", "os-frame-kernel", "os-frame-victim", "os-frame-evicting");
+                    "frame-swatch-free", "frame-swatch-allocated", "frame-swatch-kernel", "frame-swatch-victim", "frame-swatch-evicting");
             swatch.getStyleClass().add(swatchClass(row.state()));
             swatch.setText(row.nextVictim() ? "◀" : "");
 
             if (row.state() == FrameState.EVICTING)
-                content.getStyleClass().add("os-row-evicting");
+                content.getStyleClass().add("frame-table-row-evicting");
             else if (row.nextVictim())
-                content.getStyleClass().add("os-row-victim");
+                content.getStyleClass().add("frame-table-row-victim");
             else if (row.active())
                 content.getStyleClass().add("frame-table-row-active");
         }
@@ -440,7 +449,7 @@ public class FrameTableView extends VBox
         private Label dataCell(double width)
         {
             Label label = new Label();
-            label.getStyleClass().add("page-table-cell");
+            label.getStyleClass().add("data-table-cell");
             label.setPrefWidth(width);
             label.setAlignment(Pos.CENTER);
             return label;

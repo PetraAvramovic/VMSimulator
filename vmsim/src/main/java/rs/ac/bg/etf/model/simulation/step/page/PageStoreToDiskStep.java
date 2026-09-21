@@ -16,6 +16,8 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
     private PageTableDescriptor descriptor;
     private SortedMap<Long, Long> previousDiskBlock;
     private long frame;
+    // Whose page is being written back (the eviction step just before this one recorded it).
+    private int victimUser;
 
     public PageStoreToDiskStep(T context, PageTableDescriptor descriptor) {
         super(context);
@@ -32,6 +34,7 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
         previousDiskBlock = disk.readBlock(diskAddress);
 
         frame = descriptor.getBlock();
+        victimUser = context.getPageEvictionVictimUser();
         SortedMap<Long, Long> block = memory.readBlock(frame, context.getPageSize());
         disk.writeBlock(diskAddress, block);
         descriptor.setDirty(false);
@@ -52,7 +55,9 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
     @Override
     public StepDescription getStepDescription()
     {
-        return new StepDescription(StepDescriptionKey.PAGE_STORED_TO_DISK, descriptor.getPage(), descriptor.getDisk());
+        // The disk address is the Disk field of the victim page's page table entry.
+        return new StepDescription(StepDescriptionKey.PAGE_STORED_TO_DISK,
+                descriptor.getPage(), victimUser, frame, descriptor.getDisk());
     }
 
     /** The frame being written back (and then reused for the incoming page); valid once {@link #execute()} has run. */

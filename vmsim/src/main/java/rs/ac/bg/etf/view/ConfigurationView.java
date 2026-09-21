@@ -1,5 +1,6 @@
 package rs.ac.bg.etf.view;
 
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.ObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -17,6 +18,7 @@ import rs.ac.bg.etf.view.config.InstructionsEditorWindow;
 import rs.ac.bg.etf.view.config.MemoryInitEditorWindow;
 import rs.ac.bg.etf.view.config.PageTablesEditorWindow;
 import rs.ac.bg.etf.view.util.BackButton;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.viewmodel.ConfigurationViewModel;
 
 /**
@@ -26,7 +28,11 @@ import rs.ac.bg.etf.viewmodel.ConfigurationViewModel;
 public class ConfigurationView {
     // Distance the floating back button sits from the top-left corner, matching the padding
     // SimulationView's sidebar already wraps its own back button in.
-    private static final Insets BACK_BUTTON_MARGIN = new Insets(15);
+    private final Insets BACK_BUTTON_MARGIN = UiScale.insets(15);
+
+    // Status line above the action buttons: which config file the form was last filled from.
+    private static final String NO_CONFIG_LOADED_TEXT = "No config file loaded";
+    private static final String CONFIG_LOADED_PREFIX = "Loaded config: ";
 
     private final VBox layoutContainer;
     private final Parent rootContainer;
@@ -44,10 +50,10 @@ public class ConfigurationView {
         this.tlbEntriesPerSetAsObject = viewModel.tlbEntriesPerSetProperty().asObject();
 
         this.layoutContainer = new VBox();
-        this.layoutContainer.getStyleClass().add("main-menu-container");
+        this.layoutContainer.getStyleClass().add("screen-container");
         this.layoutContainer.setAlignment(Pos.CENTER);
 
-        // Bulk-data sections (program instructions, initial page table, initial memory content)
+        // Bulk-data sections (program instructions, initial page table, initial page content)
         // are too crowded to lay out inline, so each gets its own lazily-built editor window,
         // opened/closed by a button living in whichever column that section belongs to below.
         InstructionsEditorWindow instructionsEditorWindow = new InstructionsEditorWindow(viewModel.getInstructionEntries());
@@ -58,29 +64,29 @@ public class ConfigurationView {
         // 1. TOP HEADER SECTION
         // =========================================================================
         Label headerLabel = new Label("Simulation Configuration Parameters");
-        headerLabel.getStyleClass().add("main-menu-title");
+        headerLabel.getStyleClass().add("screen-title");
 
         Label subtitleLabel = new Label("Configure the hardware bit boundaries and translation engine rules.");
-        subtitleLabel.getStyleClass().add("main-menu-subtitle");
+        subtitleLabel.getStyleClass().add("screen-subtitle");
 
         // =========================================================================
         // 2. CENTRAL SIDE-BY-SIDE HORIZONTAL COLUMNS TRACK
         // =========================================================================
-        HBox columnsContainer = new HBox(40); // 40px gap between columns
+        HBox columnsContainer = new HBox(UiScale.px(40)); // 40px gap between columns
         columnsContainer.setAlignment(Pos.CENTER);
 
         // -------------------------------------------------------------------------
         // COLUMN A (LEFT): GENERAL HARDWARE OPTIONS
         // -------------------------------------------------------------------------
-        VBox generalColumn = new VBox(15);
-        generalColumn.getStyleClass().add("form-grid-base");
+        VBox generalColumn = new VBox(UiScale.px(15));
+        generalColumn.getStyleClass().add("form-column");
 
         // Column header
         Label generalHeaderLabel = new Label("General Hardware Options");
-        generalHeaderLabel.getStyleClass().add("column-header");
+        generalHeaderLabel.getStyleClass().add("section-title");
 
         // Model Selector
-        VBox modelFieldWrapper = new VBox(5);
+        VBox modelFieldWrapper = new VBox(UiScale.px(5));
         Label modelLabel = new Label("Translation Model");
         ComboBox<TranslationType> archBox = new ComboBox<>();
         archBox.getItems().setAll(TranslationType.values());
@@ -99,21 +105,21 @@ public class ConfigurationView {
         modelFieldWrapper.getChildren().addAll(modelLabel, archBox);
 
         // Word Bits input field
-        VBox wordBitsWrapper = new VBox(5);
+        VBox wordBitsWrapper = new VBox(UiScale.px(5));
         Label wordLabel = new Label("Word Width (Bits)");
         TextField wordField = new TextField();
         wordField.textProperty().bindBidirectional(viewModel.wordBitsProperty(), new javafx.util.converter.NumberStringConverter());
         wordBitsWrapper.getChildren().addAll(wordLabel, wordField);
 
         // Physical Address Bits input field
-        VBox physBitsWrapper = new VBox(5);
+        VBox physBitsWrapper = new VBox(UiScale.px(5));
         Label physLabel = new Label("Physical Address Width (Bits)");
         TextField physField = new TextField();
         physField.textProperty().bindBidirectional(viewModel.physicalAddressBitsProperty(), new javafx.util.converter.NumberStringConverter());
         physBitsWrapper.getChildren().addAll(physLabel, physField);
 
         // NEW FIELD: Addressable Unit (Bits)
-        VBox addressableUnitWrapper = new VBox(5);
+        VBox addressableUnitWrapper = new VBox(UiScale.px(5));
         Label unitLabel = new Label("Addressable Unit (Bytes)");
         ComboBox<Integer> unitBox = new ComboBox<>();
         unitBox.getItems().addAll(1, 2, 4, 8);
@@ -121,7 +127,7 @@ public class ConfigurationView {
         addressableUnitWrapper.getChildren().addAll(unitLabel, unitBox);
 
         // NEW FIELD: Users count
-        VBox usersWrapper = new VBox(5);
+        VBox usersWrapper = new VBox(UiScale.px(5));
         Label usersLabel = new Label("User Processes");
         ComboBox<Integer> usersBox = new ComboBox<>();
         usersBox.getItems().addAll(1, 2, 4, 8, 16, 32);
@@ -131,7 +137,7 @@ public class ConfigurationView {
         // The workload run against the configured hardware -- applies regardless of translation
         // type or TLB structure, so it lives in the general column alongside the other options
         // that aren't specific to either of the other two columns.
-        VBox instructionsWrapper = new VBox(5);
+        VBox instructionsWrapper = new VBox(UiScale.px(5));
         Label instructionsFieldLabel = new Label("Program");
         Button instructionsButton = buildEditorButton("Instructions", instructionsEditorWindow::toggle);
         instructionsWrapper.getChildren().addAll(instructionsFieldLabel, instructionsButton);
@@ -141,15 +147,15 @@ public class ConfigurationView {
         // -------------------------------------------------------------------------
         // COLUMN B (MIDDLE): TLB CACHE OPTIONS
         // -------------------------------------------------------------------------
-        VBox tlbColumn = new VBox(15);
-        tlbColumn.getStyleClass().add("form-grid-base");
+        VBox tlbColumn = new VBox(UiScale.px(15));
+        tlbColumn.getStyleClass().add("form-column");
 
         // Column header
         Label tlbHeaderLabel = new Label("TLB Cache Options");
-        tlbHeaderLabel.getStyleClass().add("column-header");
+        tlbHeaderLabel.getStyleClass().add("section-title");
 
         // TLB Structure Selector
-        VBox tlbTypeWrapper = new VBox(5);
+        VBox tlbTypeWrapper = new VBox(UiScale.px(5));
         Label tlbLabel = new Label("TLB Structure");
         ComboBox<TLBType> tlbBox = new ComboBox<>();
         tlbBox.getItems().setAll(TLBType.values());
@@ -168,14 +174,14 @@ public class ConfigurationView {
         tlbTypeWrapper.getChildren().addAll(tlbLabel, tlbBox);
 
         // NEW FIELD: TLB Size (Total entries count)
-        VBox tlbSizeWrapper = new VBox(5);
+        VBox tlbSizeWrapper = new VBox(UiScale.px(5));
         Label tlbSizeLabel = new Label("TLB Size (Entries)");
         TextField tlbSizeField = new TextField();
         tlbSizeField.textProperty().bindBidirectional(viewModel.tlbSizeProperty(), new javafx.util.converter.NumberStringConverter());
         tlbSizeWrapper.getChildren().addAll(tlbSizeLabel, tlbSizeField);
 
         // NEW CONDITIONAL FIELD: Entries per Set (Only visible if SET_ASSOCIATIVE lookup is selected!)
-        VBox entriesPerSetWrapper = new VBox(5);
+        VBox entriesPerSetWrapper = new VBox(UiScale.px(5));
         Label entriesPerSetLabel = new Label("Entries Per Set");
         
         // 1. Declare the ComboBox to handle Integer values directly
@@ -198,12 +204,12 @@ public class ConfigurationView {
         // -------------------------------------------------------------------------
         // COLUMN C (RIGHT): EXTRA CONDITIONAL TRANSLATION TRACK SUB-OPTIONS
         // -------------------------------------------------------------------------
-        VBox dynamicOptionsColumn = new VBox(15);
-        dynamicOptionsColumn.getStyleClass().add("form-grid-base");
+        VBox dynamicOptionsColumn = new VBox(UiScale.px(15));
+        dynamicOptionsColumn.getStyleClass().add("form-column");
 
         // Dynamic column header that changes based on translation type
         Label dynamicHeaderLabel = new Label();
-        dynamicHeaderLabel.getStyleClass().add("column-header");
+        dynamicHeaderLabel.getStyleClass().add("section-title");
 
         // Bind header text based on translation type
         viewModel.translationTypeProperty().addListener((obs, oldVal, newVal) -> {
@@ -219,25 +225,25 @@ public class ConfigurationView {
         dynamicHeaderLabel.setText("Paging Options");
 
         // Paged track options input box
-        VBox pagedSubWrapper = new VBox(10);
+        VBox pagedSubWrapper = new VBox(UiScale.px(10));
 
-        VBox pageBitsWrapper = new VBox(5);
+        VBox pageBitsWrapper = new VBox(UiScale.px(5));
         Label pageBitsLabel = new Label("Page Bits");
         TextField pageSizeField = new TextField();
         pageSizeField.textProperty().bindBidirectional(viewModel.pageBitsProperty(), new javafx.util.converter.NumberStringConverter());
         pageBitsWrapper.getChildren().addAll(pageBitsLabel, pageSizeField);
 
-        // Page table entries and initial memory content are both keyed by page number, so they
+        // Page table entries and initial page content are both keyed by page number, so they
         // only make sense once paging is selected -- kept in this sub-wrapper rather than the
         // general column so they hide/show together with Page Bits above.
-        VBox pageTableEditorWrapper = new VBox(5);
+        VBox pageTableEditorWrapper = new VBox(UiScale.px(5));
         Label pageTableFieldLabel = new Label("Page Table Entries");
         Button pageTableButton = buildEditorButton("Page Tables", pageTablesEditorWindow::toggle);
         pageTableEditorWrapper.getChildren().addAll(pageTableFieldLabel, pageTableButton);
 
-        VBox memoryInitEditorWrapper = new VBox(5);
-        Label memoryInitFieldLabel = new Label("Initial Memory Content");
-        Button memoryInitButton = buildEditorButton("Memory Content", memoryInitEditorWindow::toggle);
+        VBox memoryInitEditorWrapper = new VBox(UiScale.px(5));
+        Label memoryInitFieldLabel = new Label("Initial Page Content");
+        Button memoryInitButton = buildEditorButton("Page Content", memoryInitEditorWindow::toggle);
         memoryInitEditorWrapper.getChildren().addAll(memoryInitFieldLabel, memoryInitButton);
 
         pagedSubWrapper.getChildren().addAll(pageBitsWrapper, pageTableEditorWrapper, memoryInitEditorWrapper);
@@ -246,7 +252,7 @@ public class ConfigurationView {
         pagedSubWrapper.managedProperty().bind(pagedSubWrapper.visibleProperty());
 
         // Segmented track options input box
-        VBox segmentedSubWrapper = new VBox(5);
+        VBox segmentedSubWrapper = new VBox(UiScale.px(5));
         Label segBitsLabel = new Label("Segment Bits");
         TextField maxSegsField = new TextField();
         maxSegsField.textProperty().bindBidirectional(viewModel.segmentBitsProperty(), new javafx.util.converter.NumberStringConverter());
@@ -256,15 +262,15 @@ public class ConfigurationView {
         segmentedSubWrapper.managedProperty().bind(segmentedSubWrapper.visibleProperty());
 
         // Segmented Paging track options input box - shows both page and segment bits
-        VBox segmentedPagedSubWrapper = new VBox(10);
+        VBox segmentedPagedSubWrapper = new VBox(UiScale.px(10));
         
-        VBox segmentedPagedPageWrapper = new VBox(5);
+        VBox segmentedPagedPageWrapper = new VBox(UiScale.px(5));
         Label segmentedPagedPageLabel = new Label("Page Bits");
         TextField segmentedPagedPageField = new TextField();
         segmentedPagedPageField.textProperty().bindBidirectional(viewModel.pageBitsProperty(), new javafx.util.converter.NumberStringConverter());
         segmentedPagedPageWrapper.getChildren().addAll(segmentedPagedPageLabel, segmentedPagedPageField);
         
-        VBox segmentedPagedSegmentWrapper = new VBox(5);
+        VBox segmentedPagedSegmentWrapper = new VBox(UiScale.px(5));
         Label segmentedPagedSegmentLabel = new Label("Segment Bits");
         TextField segmentedPagedSegmentField = new TextField();
         segmentedPagedSegmentField.textProperty().bindBidirectional(viewModel.segmentBitsProperty(), new javafx.util.converter.NumberStringConverter());
@@ -304,11 +310,11 @@ public class ConfigurationView {
         errorBanner.textProperty().bind(viewModel.validationErrorMessageProperty());
 
         Button launchBtn = new Button("Launch Engine ▶");
-        launchBtn.getStyleClass().addAll("menu-button", "button-primary");
+        launchBtn.getStyleClass().addAll("button-large", "button-primary");
         launchBtn.setOnAction(e -> viewModel.validateAndLaunch());
 
         Button loadConfigBtn = new Button("📁 Load Config");
-        loadConfigBtn.getStyleClass().add("menu-button");
+        loadConfigBtn.getStyleClass().add("button-large");
         loadConfigBtn.setOnAction(e -> {
             FileChooser fileChooser = new FileChooser();
             fileChooser.setTitle("Select TOML Configuration File");
@@ -326,15 +332,24 @@ public class ConfigurationView {
             }
         });
 
-        HBox actionRow = new HBox(20);
+        Button revertBtn = new Button("Revert to Default");
+        revertBtn.getStyleClass().add("button-large");
+        revertBtn.setOnAction(e -> viewModel.revertToDefaults());
+
+        // Sits right above the buttons so it reads as the result of Load Config.
+        Label loadedConfigLabel = new Label();
+        loadedConfigLabel.getStyleClass().add("screen-status");
+        loadedConfigLabel.textProperty().bind(
+            Bindings.when(viewModel.loadedConfigFileNameProperty().isEmpty())
+                .then(NO_CONFIG_LOADED_TEXT)
+                .otherwise(Bindings.concat(CONFIG_LOADED_PREFIX, viewModel.loadedConfigFileNameProperty()))
+        );
+
+        // No grow priorities: the buttons keep their own (CSS) width and the row centres them
+        // together, instead of a spacer pushing them out to the opposite edges of the screen.
+        HBox actionRow = new HBox(UiScale.px(20));
         actionRow.setAlignment(Pos.CENTER);
-        HBox.setHgrow(actionRow, Priority.ALWAYS);
-        
-        // Create a spacer that spreads buttons across the row
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-        
-        actionRow.getChildren().addAll(loadConfigBtn, spacer, launchBtn);
+        actionRow.getChildren().addAll(loadConfigBtn, revertBtn, launchBtn);
 
         // Pack the global segments vertically onto your main display viewport scene tree
         layoutContainer.getChildren().addAll(
@@ -342,11 +357,12 @@ public class ConfigurationView {
             subtitleLabel,
             columnsContainer,
             errorBanner,
+            loadedConfigLabel,
             actionRow
         );
 
         // Push intermediate vertical node adjustments spacing padding cushions
-        layoutContainer.setSpacing(25);
+        layoutContainer.setSpacing(UiScale.px(25));
 
         // =========================================================================
         // 4. SCROLLABLE VIEWPORT + FLOATING BACK BUTTON
@@ -365,7 +381,20 @@ public class ConfigurationView {
         // scrollable form instead of living inside the footer action row.
         Button backButton = BackButton.create(viewModel::onConfigToMainMenu);
 
-        StackPane root = new StackPane(scrollPane, backButton);
+        // The form scrolls vertically, but its three columns and the button row can't usefully be
+        // squeezed side by side: the wider of the two (plus the container's own padding) is the
+        // narrowest it should be drawn at, and a window narrower than that makes the whole screen
+        // rebuild at a smaller UI scale (see ResponsiveHost) instead of clipping a column or
+        // squashing the buttons. The error banner is deliberately left out of
+        // this -- its unwrapped text width is unbounded and it re-wraps at whatever width it gets.
+        StackPane root = new StackPane(scrollPane, backButton) {
+            @Override
+            protected double computeMinWidth(double height) {
+                Insets padding = layoutContainer.getInsets();
+                return Math.max(columnsContainer.prefWidth(-1), actionRow.prefWidth(-1))
+                        + padding.getLeft() + padding.getRight();
+            }
+        };
         StackPane.setAlignment(backButton, Pos.TOP_LEFT);
         StackPane.setMargin(backButton, BACK_BUTTON_MARGIN);
         root.getStyleClass().add("config-root");

@@ -4,6 +4,7 @@ import javafx.collections.ListChangeListener;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel;
@@ -16,7 +17,7 @@ import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel.UserSummary;
 public class UserSummaryView extends VBox
 {
     private final PagedOSTabViewModel viewModel;
-    private final VBox rows = new VBox(2);
+    private final VBox rows = new VBox(UiScale.px(2));
 
     public UserSummaryView(PagedOSTabViewModel viewModel)
     {
@@ -24,7 +25,7 @@ public class UserSummaryView extends VBox
         getStyleClass().add("os-user-summary");
 
         Label header = new Label("Page Tables (per user)");
-        header.getStyleClass().add("mmu-section-label");
+        header.getStyleClass().add("schematic-heading");
         getChildren().addAll(header, rows);
 
         viewModel.getUserSummaries().addListener((ListChangeListener<UserSummary>) c -> rebuild());
@@ -44,7 +45,7 @@ public class UserSummaryView extends VBox
             Label ptp = cell("PTP " + ValueConverter.toHex(summary.ptpAddress(), ptpDigits), ptpWidth);
             Label valid = cell("valid: " + summary.validPageCount(), 0);
 
-            HBox row = new HBox(12, user, ptp, valid);
+            HBox row = new HBox(UiScale.px(12), user, ptp, valid);
             row.getStyleClass().add("os-user-summary-row");
             rows.getChildren().add(row);
         }

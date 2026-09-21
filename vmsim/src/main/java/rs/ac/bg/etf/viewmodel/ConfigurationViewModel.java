@@ -1,5 +1,6 @@
 package rs.ac.bg.etf.viewmodel;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -28,25 +29,40 @@ public class ConfigurationViewModel
     private ConfigurationNavigationListener navigationListener;
     private SimulationConfig loadedConfig = null; // Store the loaded config to preserve all fields
 
-    private final ObjectProperty<TranslationType> translationType = 
-            new SimpleObjectProperty<>(TranslationType.PAGED);
-            
-    private final ObjectProperty<TLBType> tlbType = 
-            new SimpleObjectProperty<>(TLBType.ASSOCIATIVE);
+    // What the form starts with, and what revertToDefaults() puts back.
+    private static final TranslationType DEFAULT_TRANSLATION_TYPE = TranslationType.PAGED;
+    private static final TLBType DEFAULT_TLB_TYPE = TLBType.ASSOCIATIVE;
+    private static final int DEFAULT_WORD_BITS = 12;
+    private static final int DEFAULT_PHYSICAL_ADDRESS_BITS = 16;
+    private static final int DEFAULT_PAGE_BITS = 4;
+    private static final int DEFAULT_SEGMENT_BITS = 4;
+    private static final int DEFAULT_TLB_SIZE = 16;
+    private static final int DEFAULT_TLB_ENTRIES_PER_SET = 2;
+    private static final int DEFAULT_ADDRESSABLE_UNIT = 1;
+    private static final int DEFAULT_USERS = 2;
 
-    private final IntegerProperty wordBits = new SimpleIntegerProperty(12);
-    private final IntegerProperty physicalAddressBits = new SimpleIntegerProperty(16);
+    private final ObjectProperty<TranslationType> translationType =
+            new SimpleObjectProperty<>(DEFAULT_TRANSLATION_TYPE);
 
-    private final IntegerProperty pageBits = new SimpleIntegerProperty(4); 
-    private final IntegerProperty segmentBits = new SimpleIntegerProperty(4);
+    private final ObjectProperty<TLBType> tlbType =
+            new SimpleObjectProperty<>(DEFAULT_TLB_TYPE);
 
-    private final IntegerProperty tlbSize = new SimpleIntegerProperty(16);
-    private final IntegerProperty tlbEntriesPerSet = new SimpleIntegerProperty(2);
+    private final IntegerProperty wordBits = new SimpleIntegerProperty(DEFAULT_WORD_BITS);
+    private final IntegerProperty physicalAddressBits = new SimpleIntegerProperty(DEFAULT_PHYSICAL_ADDRESS_BITS);
 
-    private final IntegerProperty addressableUnit = new SimpleIntegerProperty(1);
-    private final IntegerProperty users = new SimpleIntegerProperty(2);
+    private final IntegerProperty pageBits = new SimpleIntegerProperty(DEFAULT_PAGE_BITS);
+    private final IntegerProperty segmentBits = new SimpleIntegerProperty(DEFAULT_SEGMENT_BITS);
+
+    private final IntegerProperty tlbSize = new SimpleIntegerProperty(DEFAULT_TLB_SIZE);
+    private final IntegerProperty tlbEntriesPerSet = new SimpleIntegerProperty(DEFAULT_TLB_ENTRIES_PER_SET);
+
+    private final IntegerProperty addressableUnit = new SimpleIntegerProperty(DEFAULT_ADDRESSABLE_UNIT);
+    private final IntegerProperty users = new SimpleIntegerProperty(DEFAULT_USERS);
 
     private final StringProperty validationErrorMessage = new SimpleStringProperty("");
+
+    // File name (no directory) of the config file that loadedConfig came from; empty while nothing is loaded.
+    private final StringProperty loadedConfigFileName = new SimpleStringProperty("");
 
     // Bulk-data sections edited through their own windows (InstructionsEditorWindow,
     // PageTablesEditorWindow, MemoryInitEditorWindow) rather than inline on the config screen --
@@ -110,7 +126,7 @@ public class ConfigurationViewModel
             }
         }
 
-        // The Instructions/Page Table/Initial Memory Content editor windows are the single source
+        // The Instructions/Page Table/Initial Page Content editor windows are the single source
         // of truth for these three sections regardless of whether config came from a loaded file
         // or was built fresh above -- re-flatten them into the shapes SimulationConfig expects.
         ArrayList<Instruction> instructionList = new ArrayList<>();
@@ -173,6 +189,7 @@ public class ConfigurationViewModel
         SimulationConfig config = new SimulationConfig();
         SimulationConfig.loadFromFile(filePath, config);
         setLoadedConfig(config);
+        loadedConfigFileName.set(Path.of(filePath).getFileName().toString());
         validationErrorMessage.set("");
     }
 
@@ -255,6 +272,33 @@ public class ConfigurationViewModel
     public void clearLoadedConfig()
     {
         this.loadedConfig = null;
+        loadedConfigFileName.set("");
+    }
+
+    /**
+     * Puts every field back to the form's starting values, empties the three editor lists and
+     * unloads the config file (so a launch builds a fresh config instead of patching the loaded one).
+     */
+    public void revertToDefaults()
+    {
+        clearLoadedConfig();
+
+        translationType.set(DEFAULT_TRANSLATION_TYPE);
+        tlbType.set(DEFAULT_TLB_TYPE);
+        wordBits.set(DEFAULT_WORD_BITS);
+        physicalAddressBits.set(DEFAULT_PHYSICAL_ADDRESS_BITS);
+        pageBits.set(DEFAULT_PAGE_BITS);
+        segmentBits.set(DEFAULT_SEGMENT_BITS);
+        tlbSize.set(DEFAULT_TLB_SIZE);
+        tlbEntriesPerSet.set(DEFAULT_TLB_ENTRIES_PER_SET);
+        addressableUnit.set(DEFAULT_ADDRESSABLE_UNIT);
+        users.set(DEFAULT_USERS);
+
+        instructionEntries.clear();
+        pageTableEntries.clear();
+        memoryInitEntries.clear();
+
+        validationErrorMessage.set("");
     }
 
     public ObjectProperty<TranslationType> translationTypeProperty() { return translationType; }
@@ -268,6 +312,7 @@ public class ConfigurationViewModel
     public IntegerProperty addressableUnitProperty() { return addressableUnit; }
     public IntegerProperty usersProperty() { return users; }
     public StringProperty validationErrorMessageProperty() { return validationErrorMessage; }
+    public StringProperty loadedConfigFileNameProperty() { return loadedConfigFileName; }
 
     public ObservableList<InstructionEntry> getInstructionEntries() { return instructionEntries; }
     public ObservableList<PageTableEntry> getPageTableEntries() { return pageTableEntries; }

@@ -17,6 +17,7 @@ import javafx.scene.control.Label;
 import javafx.scene.shape.Line;
 import javafx.scene.shape.Polyline;
 import javafx.scene.shape.StrokeLineJoin;
+import rs.ac.bg.etf.view.util.UiScale;
 
 /**
  * A straight schematic wire with an optional arrow tip at its end point, an optional bit-width
@@ -61,10 +62,11 @@ public class BitWidthLine extends Group {
     /** When true the label sits on the wire's left-hand side (relative to its start&rarr;end direction). */
     private final BooleanProperty labelOnLeft = new SimpleBooleanProperty(true);
 
-    private final DoubleProperty arrowLength = new SimpleDoubleProperty(DEFAULT_ARROW_LENGTH);
-    private final DoubleProperty arrowHalfWidth = new SimpleDoubleProperty(DEFAULT_ARROW_HALF_WIDTH);
-    private final DoubleProperty tickLength = new SimpleDoubleProperty(DEFAULT_TICK_LENGTH);
-    private final DoubleProperty labelGap = new SimpleDoubleProperty(DEFAULT_LABEL_GAP);
+    // The DEFAULT_* values are design-size lengths; each wire scales them to the UI scale it is built at.
+    private final DoubleProperty arrowLength = new SimpleDoubleProperty(UiScale.px(DEFAULT_ARROW_LENGTH));
+    private final DoubleProperty arrowHalfWidth = new SimpleDoubleProperty(UiScale.px(DEFAULT_ARROW_HALF_WIDTH));
+    private final DoubleProperty tickLength = new SimpleDoubleProperty(UiScale.px(DEFAULT_TICK_LENGTH));
+    private final DoubleProperty labelGap = new SimpleDoubleProperty(UiScale.px(DEFAULT_LABEL_GAP));
 
     private final ReadOnlyDoubleWrapper midX = new ReadOnlyDoubleWrapper();
     private final ReadOnlyDoubleWrapper midY = new ReadOnlyDoubleWrapper();
@@ -87,8 +89,8 @@ public class BitWidthLine extends Group {
         // Same fix BackButton's own chevron already uses for its own sharp vertex.
         arrowHead.setStrokeLineJoin(StrokeLineJoin.ROUND);
         tick.getStyleClass().addAll("connector-line", "bit-width-line__tick");
-        bitsLabel.getStyleClass().addAll("mmu-bit-width", "bit-width-line__label");
-        valueLabel.getStyleClass().addAll("mmu-bit-value", "bit-width-line__value");
+        bitsLabel.getStyleClass().addAll("bit-width-label", "bit-width-line__label");
+        valueLabel.getStyleClass().addAll("wire-value-label", "bit-width-line__value");
 
         bitsLabel.textProperty().bind(Bindings.concat(bits.asString(), suffix));
 

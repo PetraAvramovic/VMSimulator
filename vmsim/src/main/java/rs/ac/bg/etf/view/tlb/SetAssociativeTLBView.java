@@ -3,7 +3,6 @@ package rs.ac.bg.etf.view.tlb;
 import java.util.ArrayList;
 import java.util.List;
 
-import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
@@ -24,6 +23,8 @@ import javafx.scene.shape.Line;
 import javafx.scene.shape.Polyline;
 
 import rs.ac.bg.etf.view.shape.BitWidthLine;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.UiScale;
 
 /**
  * Set-associative TLB body view: one windowed table per way ("Entry 0", "Entry 1", ...), each
@@ -41,15 +42,21 @@ import rs.ac.bg.etf.view.shape.BitWidthLine;
 public class SetAssociativeTLBView extends StackPane implements TLBBodyView
 {
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
+    // Design-size lengths, scaled to the UI scale this view is built at (the screen is rebuilt when
+    // the scale changes, so they are fixed for this instance's lifetime -- hence instance fields).
     // Matches AssociativeTLBView's own BUS_STUB_LENGTH so both TLB families' address taps read as
     // the same length wire.
-    private static final double BUS_STUB_LENGTH = 32.0;
-    private static final double WAY_GAP = 12.0;
-    private static final double CAPTION_GAP = 4.0;
+    private final double BUS_STUB_LENGTH = UiScale.px(32.0);
+    private final double WAY_GAP = UiScale.px(12.0);
+    private final double CAPTION_GAP = UiScale.px(4.0);
     // How far a way-table's block line drops below its bottom border before turning right, and the
     // fallback horizontal reach before the tab has told us where the PA Block box is.
-    private static final double BLOCK_LINE_DROP = 24.0;
-    private static final double BLOCK_LINE_FALLBACK_REACH = 160.0;
+    private final double BLOCK_LINE_DROP = UiScale.px(24.0);
+    private final double BLOCK_LINE_FALLBACK_REACH = UiScale.px(160.0);
+    // Gap between a block line and the "Nb" width label / frame readout beside it.
+    private final double BLOCK_LABEL_GAP = UiScale.px(5);
+    // Half-length of the block line's diagonal width tick.
+    private final double TICK_HALF_SPAN = UiScale.px(6);
 
     private final VBox stack = new VBox(WAY_GAP);
     private final Pane overlay = new Pane();
@@ -68,7 +75,7 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
     private final List<Label> blockBitsLabels = new ArrayList<>();
     private final Line blockJoin = connectorLine();
     private final Line blockBusLive = connectorLine();
-    private final Label blockValueLabel = flowLabel("mmu-bit-value");
+    private final Label blockValueLabel = flowLabel("wire-value-label");
     private final Line busLine = searchLine();
     private final Region busAnchor = marker();
     private final Region blockAnchor = marker();
@@ -80,6 +87,7 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
     private final BooleanProperty blockActive = new SimpleBooleanProperty(false);
     private final DoubleProperty blockLineEndX = new SimpleDoubleProperty(Double.NaN);
     private final ObjectProperty<Region> addressAnchor = new SimpleObjectProperty<>();
+    private final PostLayoutTask reposition = new PostLayoutTask(this, this::repositionAnchors);
     private final ObjectProperty<Region> tableBottomAnchor = new SimpleObjectProperty<>();
 
     public SetAssociativeTLBView(List<PagedTLBRowView> headers, List<List<PagedTLBRowView>> wayRows,
@@ -92,16 +100,16 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
 
         for (int w = 0; w < wayRows.size(); w++) {
             Label caption = new Label("Entry " + w);
-            caption.getStyleClass().add("tlb-table-title");
+            caption.getStyleClass().add("tlb-way-caption");
 
             VBox rowsBody = new VBox();
             rowsBody.getStyleClass().add("tlb-table-rows");
             rowsBody.getChildren().addAll(wayRows.get(w));
 
             VBox tableBox = new VBox();
-            // "page-table-inline" scales it up to read as the same size as the MMU tab's own
+            // "data-table-schematic" scales it up to read as the same size as the MMU tab's own
             // PageTableView (see light-theme.css).
-            tableBox.getStyleClass().addAll("tlb-table", "page-table-inline");
+            tableBox.getStyleClass().addAll("tlb-table", "data-table-schematic");
             tableBox.getChildren().addAll(headers.get(w), rowsBody);
 
             stack.getChildren().add(new VBox(CAPTION_GAP, caption, tableBox));
@@ -110,7 +118,7 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
             taps.add(tapWire());
             blockLines.add(connectorPolyline());
             blockTicks.add(connectorLine());
-            Label bits = flowLabel("mmu-bit-width");
+            Label bits = flowLabel("bit-width-label");
             bits.setText(frameBits + "b");
             blockBitsLabels.add(bits);
         }
@@ -135,17 +143,16 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
         addressAnchor.set(busAnchor);
         tableBottomAnchor.set(blockAnchor);
 
-        Runnable reposition = () -> Platform.runLater(this::repositionAnchors);
-        sceneProperty().addListener((o, ov, nv) -> reposition.run());
-        widthProperty().addListener((o, ov, nv) -> reposition.run());
-        heightProperty().addListener((o, ov, nv) -> reposition.run());
+        sceneProperty().addListener((o, ov, nv) -> reposition.request());
+        widthProperty().addListener((o, ov, nv) -> reposition.request());
+        heightProperty().addListener((o, ov, nv) -> reposition.request());
         for (List<PagedTLBRowView> rows : wayRows)
             for (PagedTLBRowView row : rows)
-                row.visibleProperty().addListener((o, ov, nv) -> reposition.run());
-        selectedWindowRow.addListener((o, ov, nv) -> reposition.run());
-        blockLineEndX.addListener((o, ov, nv) -> reposition.run());
+                row.visibleProperty().addListener((o, ov, nv) -> reposition.request());
+        selectedWindowRow.addListener((o, ov, nv) -> reposition.request());
+        blockLineEndX.addListener((o, ov, nv) -> reposition.request());
         resolvedWay.addListener((o, ov, nv) -> {
-            reposition.run();
+            reposition.request();
             updateBlockLighting();
         });
 
@@ -155,14 +162,14 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
                 setTapActive(tap, nv);
             for (VBox body : rowBodies)
                 setFogged(body, !nv);
-            reposition.run();
+            reposition.request();
         });
         blockActive.addListener((o, ov, nv) -> updateBlockLighting());
         for (VBox body : rowBodies)
             setFogged(body, !active.get());
         updateBlockLighting();
 
-        reposition.run();
+        reposition.request();
     }
 
     @Override
@@ -180,8 +187,17 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
     /** Lit while the block-output step is running: turns the resolved way's line and readout blue. */
     public BooleanProperty blockActiveProperty() { return blockActive; }
 
+    /** Height of one way's caption + table (they are all the same), without needing a layout pass. */
+    public double wayHeight() { return stack.getChildren().isEmpty() ? 0 : stack.getChildren().get(0).prefHeight(-1); }
+
     /** Far (right) end X of every way's block line, in this view's local coords; set by the tab. */
     public DoubleProperty blockLineEndXProperty() { return blockLineEndX; }
+
+    @Override
+    public void syncAnchors()
+    {
+        reposition.runNow();
+    }
 
     private void repositionAnchors()
     {
@@ -295,7 +311,7 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
             bits.autosize();
             bits.setVisible(true);
             bits.setLayoutX(tickX - bits.getWidth() / 2);
-            bits.setLayoutY(lineY + 5);
+            bits.setLayoutY(lineY + BLOCK_LABEL_GAP);
             if (firstLineY == null)
                 firstLineY = lineY;
             lastLineY = lineY;
@@ -325,7 +341,7 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
             blockValueLabel.autosize();
             blockValueLabel.setVisible(true);
             blockValueLabel.setLayoutX(tickX - blockValueLabel.getWidth() / 2);
-            blockValueLabel.setLayoutY(lineY - blockValueLabel.getHeight() - 5);
+            blockValueLabel.setLayoutY(lineY - blockValueLabel.getHeight() - BLOCK_LABEL_GAP);
         } else {
             blockBusLive.setVisible(false);
             blockValueLabel.setVisible(false);
@@ -381,17 +397,17 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
 
     private static void setFogged(VBox body, boolean fogged)
     {
-        body.setEffect(fogged ? new BoxBlur(6, 6, 3) : null);
+        body.setEffect(fogged ? new BoxBlur(UiScale.px(6), UiScale.px(6), 3) : null);
         body.setOpacity(fogged ? 0.45 : 1.0);
     }
 
-    private static void positionTick(Line mark, double centerX, double centerY)
+    private void positionTick(Line mark, double centerX, double centerY)
     {
         mark.setVisible(true);
-        mark.setStartX(centerX - 6);
-        mark.setStartY(centerY + 6);
-        mark.setEndX(centerX + 6);
-        mark.setEndY(centerY - 6);
+        mark.setStartX(centerX - TICK_HALF_SPAN);
+        mark.setStartY(centerY + TICK_HALF_SPAN);
+        mark.setEndX(centerX + TICK_HALF_SPAN);
+        mark.setEndY(centerY - TICK_HALF_SPAN);
     }
 
     private static Region marker()
@@ -419,7 +435,7 @@ public class SetAssociativeTLBView extends StackPane implements TLBBodyView
         // Unmanaged: the hand-positioned bus/tap geometry reaches left of the tables into negative
         // overlay coords and must not inflate the overlay's bounds.
         line.setManaged(false);
-        line.getStyleClass().add("tlb-search-line");
+        line.getStyleClass().add("connector-line");
         return line;
     }
 

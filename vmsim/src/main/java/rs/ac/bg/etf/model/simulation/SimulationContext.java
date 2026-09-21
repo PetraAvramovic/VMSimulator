@@ -167,6 +167,15 @@ public abstract class SimulationContext
         return config.getDiskBits();
     }
 
+    /**
+     * The current instruction's virtual address without its word-offset bits: the page number when
+     * paged. Together with the user it is what a TLB lookup key is built from.
+     */
+    public long getAddressComponent()
+    {
+        return getCurrentInstruction().getVirtualAddress() >> config.getWordBits();
+    }
+
     public long getWordComponent()
     {
         Instruction instruction = getCurrentInstruction();

@@ -1,7 +1,10 @@
 package rs.ac.bg.etf.view.inspector;
 
+import rs.ac.bg.etf.view.util.UiScale;
 import java.util.List;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.beans.property.IntegerProperty;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -12,6 +15,8 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.view.util.InspectorWindows;
+import rs.ac.bg.etf.view.util.LockedRow;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.view.util.WindowedTableColumn;
@@ -32,6 +37,9 @@ import rs.ac.bg.etf.view.util.WindowedTableView;
  */
 public class MemoryInspectorWindow
 {
+    private final ChangeListener<Number> refreshOnStep;
+
+    // Design-size; scaled where it is used, inside build() (see InspectorWindows for the scale).
     private static final double ROOT_PADDING = 12;
 
     private final PageSimulationContext context;
@@ -42,10 +50,14 @@ public class MemoryInspectorWindow
     public MemoryInspectorWindow(PageSimulationContext context, IntegerProperty currentStepNumber)
     {
         this.context = context;
-        currentStepNumber.addListener((o, ov, nv) -> {
+        // Registered weakly on the (long-lived) simulation step property so this window can be garbage
+        // collected once the tab view that created it has been rebuilt for a new UI scale (see
+        // UiScale); this field is what keeps the listener alive for as long as the window itself is.
+        refreshOnStep = (o, ov, nv) -> {
             if (tableView != null)
                 tableView.refresh();
-        });
+        };
+        currentStepNumber.addListener(new WeakChangeListener<>(refreshOnStep));
     }
 
     /** Opens the window seeked to {@code seedAddress}, or closes it if already open -- a second
@@ -58,7 +70,7 @@ public class MemoryInspectorWindow
             return;
         }
         if (stage == null)
-            stage = build(owner);
+            stage = InspectorWindows.build(() -> build(owner));
         tableView.centerOn(seedAddress);
         stage.show();
         stage.toFront();
@@ -67,13 +79,15 @@ public class MemoryInspectorWindow
     private Stage build(Window owner)
     {
         tableView = new WindowedTableView<>(memoryColumns(), "address",
-                row -> row.locked() ? "page-table-row-locked" : null);
+                row -> row.locked() ? LockedRow.STYLE_CLASS : null,
+                row -> row.locked() ? LockedRow.TOOLTIP : null);
         tableView.setRowSource(new MemoryRowSource(context));
         VBox.setVgrow(tableView, Priority.ALWAYS);
 
-        VBox root = new VBox(8, tableView);
-        root.getStyleClass().add("page-table-inspector");
-        root.setPadding(new Insets(ROOT_PADDING));
+        double rootPadding = UiScale.px(ROOT_PADDING);
+        VBox root = new VBox(UiScale.px(8), tableView);
+        root.getStyleClass().add("inspector-root");
+        root.setPadding(new Insets(rootPadding));
 
         Stage s = new Stage();
         s.initModality(Modality.NONE);
@@ -81,12 +95,12 @@ public class MemoryInspectorWindow
             s.initOwner(owner);
         s.setTitle("Memory Inspector");
 
-        Scene scene = new Scene(root, 360, 420);
-        scene.getStylesheets().add(getClass().getResource("/rs/ac/bg/etf/light-theme.css").toExternalForm());
+        Scene scene = new Scene(root, UiScale.px(360), UiScale.px(420));
+        UiScale.applyTheme(scene);
         s.setScene(scene);
 
-        s.setMinWidth(tableView.minimumWidth() + 2 * ROOT_PADDING);
-        s.setMinHeight(tableView.minimumHeight() + 2 * ROOT_PADDING);
+        s.setMinWidth(tableView.minimumWidth() + 2 * rootPadding);
+        s.setMinHeight(tableView.minimumHeight() + 2 * rootPadding);
 
         return s;
     }

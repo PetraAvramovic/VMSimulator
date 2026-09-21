@@ -20,15 +20,15 @@ public abstract class TLBRowView extends HBox
     {
         super();
         this.setAlignment(Pos.CENTER_LEFT);
-        this.getStyleClass().add("page-table-row");
+        this.getStyleClass().add("data-table-row");
 
         // No fixed pixel height: the row sizes itself from font metrics + the CSS row padding (see
-        // light-theme.css's ".page-table-inline > .tlb-table-rows > .page-table-row"), the same way
+        // light-theme.css's ".data-table-schematic > .tlb-table-rows > .data-table-row"), the same way
         // PageTableView's own rows do -- matches the MMU schematic's table exactly, including when
         // the enlarged 19px font is applied.
-        indexLabel = cell("", WidthCalculator.LARGE_INDEX_COL_WIDTH);
-        vLabel = cell("", WidthCalculator.LARGE_BIT_COL_WIDTH);
-        dLabel = cell("", WidthCalculator.LARGE_BIT_COL_WIDTH);
+        indexLabel = cell("", WidthCalculator.largeIndexColumnWidth());
+        vLabel = cell("", WidthCalculator.largeBitColumnWidth());
+        dLabel = cell("", WidthCalculator.largeBitColumnWidth());
         tagLabel = cell("", WidthCalculator.columnWidth("Tag", tagHexWidth, WidthCalculator.LARGE_CELL_FONT_SIZE));
 
         indexLabel.visibleProperty().bind(showIndex);
@@ -51,10 +51,10 @@ public abstract class TLBRowView extends HBox
         this.vLabel.setText(vText);
         this.dLabel.setText(dText);
         this.tagLabel.setText(tagText);
-        // A header row isn't a body row -- drop "page-table-row" so its lighter grey underline
-        // and padding don't fight .page-table-header's own (darker, differently padded) styling.
-        getStyleClass().remove("page-table-row");
-        getStyleClass().add("page-table-header");
+        // A header row isn't a body row -- drop "data-table-row" so its lighter grey underline
+        // and padding don't fight .data-table-header's own (darker, differently padded) styling.
+        getStyleClass().remove("data-table-row");
+        getStyleClass().add("data-table-header");
     }
 
     public void setShowIndex(boolean show) {
@@ -67,7 +67,7 @@ public abstract class TLBRowView extends HBox
 
     protected Label cell(String text, double width) {
         Label label = new Label(text);
-        label.getStyleClass().add("page-table-cell");
+        label.getStyleClass().add("data-table-cell");
         
         
         label.setMinWidth(width);

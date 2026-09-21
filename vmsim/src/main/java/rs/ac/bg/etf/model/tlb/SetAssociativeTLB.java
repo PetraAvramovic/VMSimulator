@@ -49,9 +49,23 @@ public class SetAssociativeTLB extends TLB
     }
 
     /** Set a full lookup key maps to ({@code key % numSets}). */
+    @Override
     public int setIndexOf(long fullKey)
     {
         return setIndexFor(fullKey);
+    }
+
+    /** The way of the entry at flat index {@code slot} -- the "Entry k" table it is drawn in. */
+    @Override
+    public int entryNumber(int slot)
+    {
+        return slot / numSets;
+    }
+
+    @Override
+    public int setNumber(int slot)
+    {
+        return slot % numSets;
     }
 
     /**

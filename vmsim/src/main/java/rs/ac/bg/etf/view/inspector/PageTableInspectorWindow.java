@@ -1,7 +1,10 @@
 package rs.ac.bg.etf.view.inspector;
 
+import rs.ac.bg.etf.view.util.UiScale;
 import java.util.List;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.beans.property.IntegerProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -16,6 +19,7 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.view.util.InspectorWindows;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.view.util.WindowedTableColumn;
@@ -34,6 +38,9 @@ import rs.ac.bg.etf.view.util.WindowedTableView;
  */
 public class PageTableInspectorWindow
 {
+    private final ChangeListener<Number> refreshOnStep;
+
+    // Design-size; scaled where they are used, inside build() (see InspectorWindows for the scale).
     private static final double PICKER_ROW_HEIGHT = 36;
     private static final double ROOT_PADDING = 12;
 
@@ -48,10 +55,14 @@ public class PageTableInspectorWindow
     {
         this.context = context;
         this.diskInspector = new DiskBlockInspectorWindow(context, currentStepNumber);
-        currentStepNumber.addListener((o, ov, nv) -> {
+        // Registered weakly on the (long-lived) simulation step property so this window can be garbage
+        // collected once the tab view that created it has been rebuilt for a new UI scale (see
+        // UiScale); this field is what keeps the listener alive for as long as the window itself is.
+        refreshOnStep = (o, ov, nv) -> {
             if (tableView != null)
                 tableView.refresh();
-        });
+        };
+        currentStepNumber.addListener(new WeakChangeListener<>(refreshOnStep));
     }
 
     /** Opens the window (defaulting the user picker to the current instruction's user), or closes
@@ -64,7 +75,7 @@ public class PageTableInspectorWindow
             return;
         }
         if (stage == null)
-            stage = build(owner);
+            stage = InspectorWindows.build(() -> build(owner));
         userPicker.getSelectionModel().select(Integer.valueOf(defaultUser()));
         stage.show();
         stage.toFront();
@@ -86,7 +97,7 @@ public class PageTableInspectorWindow
         s.setTitle("Page Table Inspector");
 
         Label userLabel = new Label("User");
-        userLabel.getStyleClass().add("va-breakdown-title");
+        userLabel.getStyleClass().add("field-box-title");
 
         userPicker = new ComboBox<>();
         for (int user = 0; user < context.getNumberOfUsers(); user++)
@@ -96,24 +107,27 @@ public class PageTableInspectorWindow
                 selectUser(nv);
         });
 
-        HBox pickerBar = new HBox(8, userLabel, userPicker);
+        double pickerRowHeight = UiScale.px(PICKER_ROW_HEIGHT);
+        double rootPadding = UiScale.px(ROOT_PADDING);
+
+        HBox pickerBar = new HBox(UiScale.px(8), userLabel, userPicker);
         pickerBar.setAlignment(Pos.CENTER_LEFT);
-        pickerBar.setMinHeight(PICKER_ROW_HEIGHT);
-        pickerBar.setPrefHeight(PICKER_ROW_HEIGHT);
+        pickerBar.setMinHeight(pickerRowHeight);
+        pickerBar.setPrefHeight(pickerRowHeight);
 
         tableView = new WindowedTableView<>(pageTableColumns(s), "page");
         VBox.setVgrow(tableView, Priority.ALWAYS);
 
-        VBox root = new VBox(8, pickerBar, tableView);
-        root.getStyleClass().add("page-table-inspector");
-        root.setPadding(new Insets(ROOT_PADDING));
+        VBox root = new VBox(UiScale.px(8), pickerBar, tableView);
+        root.getStyleClass().add("inspector-root");
+        root.setPadding(new Insets(rootPadding));
 
-        Scene scene = new Scene(root, 460, 420);
-        scene.getStylesheets().add(getClass().getResource("/rs/ac/bg/etf/light-theme.css").toExternalForm());
+        Scene scene = new Scene(root, UiScale.px(460), UiScale.px(420));
+        UiScale.applyTheme(scene);
         s.setScene(scene);
 
-        s.setMinWidth(tableView.minimumWidth() + 2 * ROOT_PADDING);
-        s.setMinHeight(PICKER_ROW_HEIGHT + tableView.minimumHeight() + 2 * ROOT_PADDING + 8);
+        s.setMinWidth(tableView.minimumWidth() + 2 * rootPadding);
+        s.setMinHeight(pickerRowHeight + tableView.minimumHeight() + 2 * rootPadding + UiScale.px(8));
 
         return s;
     }

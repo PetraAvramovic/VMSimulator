@@ -17,7 +17,8 @@ import javafx.scene.shape.StrokeLineJoin;
  * origin centres perfectly regardless of font or platform.
  */
 public final class BackButton {
-    // Chevron half-span in each direction from its centre point, in local (icon) coordinates.
+    // Chevron half-span in each direction from its centre point, in local (icon) coordinates
+    // (design-size lengths, scaled with the UI in create()).
     private static final double CHEVRON_HALF_WIDTH = 4;
     private static final double CHEVRON_HALF_HEIGHT = 5;
 
@@ -25,10 +26,12 @@ public final class BackButton {
     }
 
     public static Button create(Runnable onAction) {
+        double halfWidth = UiScale.px(CHEVRON_HALF_WIDTH);
+        double halfHeight = UiScale.px(CHEVRON_HALF_HEIGHT);
         Polyline chevron = new Polyline(
-                CHEVRON_HALF_WIDTH, -CHEVRON_HALF_HEIGHT,
-                -CHEVRON_HALF_WIDTH, 0,
-                CHEVRON_HALF_WIDTH, CHEVRON_HALF_HEIGHT);
+                halfWidth, -halfHeight,
+                -halfWidth, 0,
+                halfWidth, halfHeight);
         chevron.getStyleClass().add("back-button-icon");
         chevron.setStrokeLineCap(StrokeLineCap.ROUND);
         chevron.setStrokeLineJoin(StrokeLineJoin.ROUND);

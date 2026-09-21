@@ -3,7 +3,6 @@ package rs.ac.bg.etf.view.tlb;
 import java.util.ArrayList;
 import java.util.List;
 
-import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
@@ -15,9 +14,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -27,6 +24,9 @@ import rs.ac.bg.etf.view.inspector.TLBInspectorWindow;
 import rs.ac.bg.etf.view.shape.BitWidthLine;
 import rs.ac.bg.etf.view.shape.CurlyBrace;
 import rs.ac.bg.etf.view.util.FieldBoxes;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.SchematicTab;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel;
@@ -41,61 +41,71 @@ import rs.ac.bg.etf.viewmodel.PagedTLBTabViewModel.TlbSideNote;
  * only exposes layout landmarks; this class owns the address-merge wiring and always routes the
  * block output off the bottom of the row table.
  */
-public class PagedTLBTabView extends StackPane
+public class PagedTLBTabView extends SchematicTab
 {
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
-    // Floor, not a fixed size: the canvas grows to fill the tab's real width (see the ScrollPane's
-    // setFitToWidth below) and PA is bound to that live width, never a hardcoded pixel canvas size --
-    // matches PagedMMUTabView's MIN_CANVAS_WIDTH treatment exactly.
-    private static final double MIN_CANVAS_WIDTH = 900;
-    private static final double CANVAS_HEIGHT = 720;
-    private static final double MARGIN = 30;
+    // Starting estimates, not fixed sizes: the canvas grows to fill the tab's real viewport (see
+    // SchematicTab.mountCanvas) and PA is bound to that live width, never a hardcoded pixel canvas
+    // size -- matches PagedMMUTabView's treatment exactly. MIN_CANVAS_WIDTH is a floor under the
+    // width derived from the laid-out table (see updateDesignWidth); CANVAS_HEIGHT only stands in
+    // until the block wire's real bottom edge has been measured (see updateConnectors), so a wider
+    // TLB never ends up with wires through its rows.
+    private final double MIN_CANVAS_WIDTH = UiScale.px(900);
+    private final double CANVAS_HEIGHT = UiScale.px(720);
+    private final double MARGIN = UiScale.px(30);
+    // How far the block wire's rising leg (or the set-associative output bus) must stay clear of the
+    // table's right edge -- room for the wire's own tick, "Nb" tag and the frame-number readout.
+    private final double BLOCK_WIRE_CLEARANCE = UiScale.px(60);
+    // Room below the set-associative way-tables' stack for each way's block line (which drops just
+    // under its table), the shared output bus's frame readout and the bottom margin.
+    private final double SET_ASSOC_BLOCK_LINE_ALLOWANCE = UiScale.px(120);
     // Matches PagedMMUTabView's own boxY (78): the gap from the section-label title (y=20, set by
     // FieldBoxes.sectionLabel calls below) down to the field-box title (BOX_Y - 20) down to the box
     // itself must read the same on both schematic tabs.
-    private static final double BOX_Y = 78;
+    private final double BOX_Y = UiScale.px(78);
     // Shared by every field box in the Process/VA/PA row -- User, Page, Word, Block -- so they all
     // read as one consistent height (the MMU tab's taller "solo" BOX_HEIGHT is only for its own
     // standalone Page Table Pointer box, which has no counterpart here).
-    private static final double ADDRESS_BOX_HEIGHT = FieldBoxes.ADDRESS_BOX_HEIGHT;
-    private static final double ADDRESS_FIELD_PADDING = FieldBoxes.ADDRESS_FIELD_PADDING;
-    private static final double PROCESS_GAP = 64;
-    private static final double TABLE_Y = 300;
+    private final double ADDRESS_BOX_HEIGHT = FieldBoxes.addressBoxHeight();
+    private final double ADDRESS_FIELD_PADDING = FieldBoxes.addressFieldPadding();
+    // Gap between a field title and the box it labels.
+    private final double TITLE_GAP = FieldBoxes.titleGap();
+    private final double PROCESS_GAP = UiScale.px(64);
+    private final double TABLE_Y = UiScale.px(300);
     // How far right of the merge point the table sits -- past AssociativeTLBView's own bus-stub
     // length, purely for breathing room between the tag wiring and the table (the router recomputes
     // the live bus anchor either way, so this only steers the body node's initial placement).
-    private static final double BUS_STUB_APPROX = 150;
-    private static final double BRACE_EAR_Y = BOX_Y + ADDRESS_BOX_HEIGHT + 72;
-    private static final double BRACE_DEPTH = 16;
-    private static final double BRACE_GAP = 8;
-    private static final double BLOCK_DROP = 44;
+    private final double BUS_STUB_APPROX = UiScale.px(150);
+    private final double BRACE_EAR_Y = BOX_Y + ADDRESS_BOX_HEIGHT + UiScale.px(72);
+    private final double BRACE_DEPTH = UiScale.px(16);
+    private final double BRACE_GAP = UiScale.px(8);
+    private final double BLOCK_DROP = UiScale.px(44);
     // Direct-mapped fork geometry: a long k@p stem from the brace tip to the fork bar, then two
     // parallel legs FORK_HALF_WIDTH px either side of it -- the tag leg drops SPLIT_LEG_LEN px to
     // its readout, the index leg drops to the selected row. The table is nudged down/right to fit.
     // FORK_HALF_WIDTH is wide enough that the tag leg's own labels (tick + value) never crowd the
     // index leg's, which sits the same distance out on the fork's other side.
-    private static final double KP_STEM_LEN = 72;
-    private static final double FORK_HALF_WIDTH = 40;
+    private final double KP_STEM_LEN = UiScale.px(72);
+    private final double FORK_HALF_WIDTH = UiScale.px(40);
     // Long enough that the tag's own bit-width tick reads at a true, visually centred midpoint (not
     // cramped against the fork bar) with room left below it before the live value readout, which
     // sits under the wire's dead end -- see tagValueLabel's own gap below.
-    private static final double SPLIT_LEG_LEN = 110;
+    private final double SPLIT_LEG_LEN = UiScale.px(110);
     // Gap between the tag leg's dead end and its live hex value readout, matching zeroFillLabel's
     // own gap treatment in PagedMMUTabView.
-    private static final double TAG_VALUE_GAP = 6;
-    private static final double DIRECT_TABLE_X = 220;
-    private static final double DIRECT_TABLE_Y = 84;
+    private final double TAG_VALUE_GAP = UiScale.px(6);
+    private final double DIRECT_TABLE_X = UiScale.px(220);
+    private final double DIRECT_TABLE_Y = UiScale.px(84);
     // Set-associative stacks several tables, so it starts them well above the direct/assoc table
     // (the fork sits to their left, not above) -- but still clear of the word pass-through line and
     // the address boxes -- to give the 4-way case a chance of fitting with little/no scrolling.
-    private static final double SET_ASSOC_TABLE_Y = 210;
+    private final double SET_ASSOC_TABLE_Y = UiScale.px(210);
     // Gap between the "TLB" title's own measured bottom edge and the table's top border, matching
     // PagedMMUTabView's own TABLE_TITLE_GAP treatment for "Page Table" (live label height, not a
     // guessed pixel offset, so it holds regardless of font family/size changes down the line).
-    private static final double TABLE_TITLE_GAP = 8;
+    private final double TABLE_TITLE_GAP = UiScale.px(8);
 
     private final PagedTLBTabViewModel viewModel;
-    private final Pane canvas = new Pane();
     // Flat list of every row view in the body (one table's worth for direct / associative; all
     // way-tables concatenated for set-associative) -- used for the connector re-route listeners.
     private final List<PagedTLBRowView> rowViews = new ArrayList<>();
@@ -150,15 +160,18 @@ public class PagedTLBTabView extends StackPane
     private final BitWidthLine blockRiserFar;
     private final BitWidthLine blockRiserNear;
     private final Region blockBoxPA;
+    // Width of PA's Word box, kept so updateDesignWidth knows how much room the PA pair needs.
+    private double paWordBoxWidth;
 
-    private final Runnable reposition;
+    private final PostLayoutTask reposition;
+    // Wires a re-route wants above the body view, in the order it asked for them (see updateConnectors).
+    private final List<Node> raiseOrder = new ArrayList<>();
 
     public PagedTLBTabView(PagedTLBTabViewModel viewModel)
     {
         this.viewModel = viewModel;
-        getStyleClass().add("tlb-tab-view");
-        canvas.setMinWidth(MIN_CANVAS_WIDTH);
-        canvas.setPrefHeight(CANVAS_HEIGHT);
+        canvas.designWidthProperty().set(MIN_CANVAS_WIDTH);
+        canvas.designHeightProperty().set(CANVAS_HEIGHT);
 
         int tagDigits = viewModel.tagHexDigitsProperty().get();
         int blockDigits = viewModel.blockHexDigitsProperty().get();
@@ -167,19 +180,19 @@ public class PagedTLBTabView extends StackPane
         // Process's User box shares ADDRESS_BOX_HEIGHT with the VA/PA address boxes (not the taller
         // "solo" BOX_HEIGHT the MMU tab's standalone Page Table Pointer box uses) so all three field
         // boxes in this row read as one consistent height, only FIELD_PADDING keeps its narrower width.
-        Region userBox = FieldBoxes.valueCell("va-breakdown-cell-solo", viewModel.userHexProperty(),
-                ValueConverter.hexDigitsFor(viewModel.getProcessIdBits()), ADDRESS_BOX_HEIGHT, FieldBoxes.FIELD_PADDING);
+        Region userBox = FieldBoxes.valueCell("field-box-cell-solo", viewModel.userHexProperty(),
+                ValueConverter.hexDigitsFor(viewModel.getProcessIdBits()), ADDRESS_BOX_HEIGHT, FieldBoxes.fieldPadding());
         double userBoxW = userBox.getPrefWidth();
         double userBoxX = MARGIN;
         place(userBox, userBoxX, BOX_Y);
 
-        Region pageBox = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.pageHexProperty(),
+        Region pageBox = FieldBoxes.valueCell("field-box-cell-left", viewModel.pageHexProperty(),
                 ValueConverter.hexDigitsFor(viewModel.getPageBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double pageBoxW = pageBox.getPrefWidth();
         double pageBoxX = userBoxX + userBoxW + PROCESS_GAP;
         place(pageBox, pageBoxX, BOX_Y);
 
-        Region wordBoxVA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.wordHexProperty(),
+        Region wordBoxVA = FieldBoxes.valueCell("field-box-cell-right", viewModel.wordHexProperty(),
                 ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double wordBoxW = wordBoxVA.getPrefWidth();
         double wordBoxVAX = pageBoxX + pageBoxW;
@@ -189,25 +202,26 @@ public class PagedTLBTabView extends StackPane
         // ScrollPane's setFitToWidth below), not a fixed pixel canvas size, so PA always sits flush
         // against the tab's real right edge instead of pinned at some fixed offset that leaves unused
         // space on a wider window -- mirrors PagedMMUTabView's wordBoxPA/blockBoxPA treatment exactly.
-        Region wordBoxPA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.paWordHexProperty(),
+        Region wordBoxPA = FieldBoxes.valueCell("field-box-cell-right", viewModel.paWordHexProperty(),
                 ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         wordBoxPA.layoutXProperty().bind(canvas.widthProperty().subtract(MARGIN).subtract(wordBoxW));
         wordBoxPA.setLayoutY(BOX_Y);
+        paWordBoxWidth = wordBoxW;
 
-        blockBoxPA = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.blockHexProperty(), blockDigits, ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
+        blockBoxPA = FieldBoxes.valueCell("field-box-cell-left", viewModel.blockHexProperty(), blockDigits, ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double blockBoxW = blockBoxPA.getPrefWidth();
         blockBoxPA.layoutXProperty().bind(wordBoxPA.layoutXProperty().subtract(blockBoxW));
         blockBoxPA.setLayoutY(BOX_Y);
 
-        Label userTitle = FieldBoxes.fieldTitle("User", userBox, BOX_Y - 20);
-        Label pageTitle = FieldBoxes.fieldTitle("Page", pageBox, BOX_Y - 20);
-        Label wordTitleVA = FieldBoxes.fieldTitle("Word", wordBoxVA, BOX_Y - 20);
-        Label blockTitle = FieldBoxes.fieldTitle("Block", blockBoxPA, BOX_Y - 20);
-        Label wordTitlePA = FieldBoxes.fieldTitle("Word", wordBoxPA, BOX_Y - 20);
+        Label userTitle = FieldBoxes.fieldTitle("User", userBox, BOX_Y - TITLE_GAP);
+        Label pageTitle = FieldBoxes.fieldTitle("Page", pageBox, BOX_Y - TITLE_GAP);
+        Label wordTitleVA = FieldBoxes.fieldTitle("Word", wordBoxVA, BOX_Y - TITLE_GAP);
+        Label blockTitle = FieldBoxes.fieldTitle("Block", blockBoxPA, BOX_Y - TITLE_GAP);
+        Label wordTitlePA = FieldBoxes.fieldTitle("Word", wordBoxPA, BOX_Y - TITLE_GAP);
 
-        Label processHeader = FieldBoxes.sectionLabel("Process", userBoxX, 20);
-        Label vaHeader = FieldBoxes.sectionLabel("Virtual Address", pageBoxX, 20);
-        Label paHeader = FieldBoxes.sectionLabel("Physical Address", 0, 20);
+        Label processHeader = FieldBoxes.sectionLabel("Process", userBoxX, UiScale.px(20));
+        Label vaHeader = FieldBoxes.sectionLabel("Virtual Address", pageBoxX, UiScale.px(20));
+        Label paHeader = FieldBoxes.sectionLabel("Physical Address", 0, UiScale.px(20));
         paHeader.layoutXProperty().bind(blockBoxPA.layoutXProperty());
 
         // ---- Tag formation geometry: user@page merge point ---------------------------------
@@ -264,7 +278,7 @@ public class PagedTLBTabView extends StackPane
 
         // Clicking the schematic's small windowed preview opens a separate, resizable window that
         // browses the full TLB (up to tlbSize entries), same affordance as the MMU tab's page table.
-        bodyNode.getStyleClass().add("tlb-clickable");
+        bodyNode.getStyleClass().add("tlb-body-clickable");
         bodyNode.setCursor(javafx.scene.Cursor.HAND);
         TLBInspectorWindow tlbInspector =
                 new TLBInspectorWindow(viewModel.getContext(), viewModel.currentStepNumberProperty());
@@ -274,11 +288,11 @@ public class PagedTLBTabView extends StackPane
         // Sits above the whole schematic table -- for set-associative that means above "Entry 0"'s
         // own (much quieter) per-way caption, distinguishing this shared title from those.
         Label tableHeader = FieldBoxes.sectionLabel("TLB", tableX, 0);
-        // Shares .table-title with PagedMMUTabView's "Page Table" title -- the schematic's own
-        // table-name caption, styled like .mmu-section-label but under its own name since it's
+        // Shares .schematic-heading with PagedMMUTabView's "Page Table" title -- the schematic's own
+        // table-name caption, styled like .schematic-heading but under its own name since it's
         // specifically these two tables' titles, not every schematic-block heading.
-        tableHeader.getStyleClass().remove("mmu-section-label");
-        tableHeader.getStyleClass().add("table-title");
+        tableHeader.getStyleClass().remove("schematic-heading");
+        tableHeader.getStyleClass().add("schematic-heading");
         // Bound to the label's own measured height (not a guessed pixel offset), so its bottom edge
         // always sits TABLE_TITLE_GAP above the table's top border regardless of font changes.
         tableHeader.layoutYProperty().bind(Bindings.createDoubleBinding(
@@ -336,7 +350,7 @@ public class PagedTLBTabView extends StackPane
         tagLeg.labelOnLeftProperty().set(true);
 
         tagValueLabel = new Label();
-        tagValueLabel.getStyleClass().add("mmu-bit-value");
+        tagValueLabel.getStyleClass().add("wire-value-label");
         tagValueLabel.textProperty().bind(hideWhenInactive(viewModel.tagHexProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB)));
 
         indexStub = bitWidthWire(viewModel.getIndexBits());
@@ -372,7 +386,7 @@ public class PagedTLBTabView extends StackPane
         // Right-angle elbow, each straight leg its own BitWidthLine (mirrors PagedMMUTabView's own
         // wordDownVA/wordAcross/wordUpPA treatment exactly, including the property bindings that let
         // it track wordBoxPA's own live-bound layoutX with no manual re-routing).
-        double passY = BOX_Y + ADDRESS_BOX_HEIGHT + 40;
+        double passY = BOX_Y + ADDRESS_BOX_HEIGHT + UiScale.px(40);
         double wordVACenterX = wordBoxVAX + wordBoxW / 2;
         var wordPACenterX = wordBoxPA.layoutXProperty().add(wordBoxW / 2.0);
 
@@ -463,30 +477,31 @@ public class PagedTLBTabView extends StackPane
                 bodyNode);
 
         // ---- Dynamic connectors: the anchors are marker Regions the body view positions during
-        // its own layout pass, so re-run whenever that layout (or ours) changes. -------------
-        reposition = () -> Platform.runLater(this::updateConnectors);
-        bodyView.addressAnchorProperty().addListener((o, ov, nv) -> reposition.run());
-        bodyView.tableBottomAnchorProperty().addListener((o, ov, nv) -> reposition.run());
-        bodyNode.layoutBoundsProperty().addListener((o, ov, nv) -> reposition.run());
-        bodyNode.boundsInParentProperty().addListener((o, ov, nv) -> reposition.run());
+        // its own layout pass, so re-run whenever that layout (or ours) changes -- once per pulse,
+        // right after layout (see PostLayoutTask), not once per change and a frame behind. ------
+        reposition = new PostLayoutTask(this, this::updateConnectors);
+        bodyView.addressAnchorProperty().addListener((o, ov, nv) -> reposition.request());
+        bodyView.tableBottomAnchorProperty().addListener((o, ov, nv) -> reposition.request());
+        bodyNode.layoutBoundsProperty().addListener((o, ov, nv) -> reposition.request());
+        bodyNode.boundsInParentProperty().addListener((o, ov, nv) -> reposition.request());
         for (PagedTLBRowView row : rowViews) {
-            row.blockCellAnchorProperty().addListener((o, ov, nv) -> reposition.run());
-            row.layoutBoundsProperty().addListener((o, ov, nv) -> reposition.run());
+            row.blockCellAnchorProperty().addListener((o, ov, nv) -> reposition.request());
+            row.layoutBoundsProperty().addListener((o, ov, nv) -> reposition.request());
         }
-        canvas.widthProperty().addListener((o, ov, nv) -> reposition.run());
-        canvas.heightProperty().addListener((o, ov, nv) -> reposition.run());
-        sceneProperty().addListener((o, ov, nv) -> reposition.run());
+        canvas.widthProperty().addListener((o, ov, nv) -> reposition.request());
+        canvas.heightProperty().addListener((o, ov, nv) -> reposition.request());
+        sceneProperty().addListener((o, ov, nv) -> reposition.request());
         // The direct-mapped / set-associative body view moves its address marker in place (no
         // property swap), so the index wire must be re-routed when the selected row -- or, for
         // set-associative, the resolved way the block output leaves from -- changes.
-        viewModel.selectedWindowRowProperty().addListener((o, ov, nv) -> reposition.run());
-        viewModel.resolvedWayProperty().addListener((o, ov, nv) -> reposition.run());
+        viewModel.selectedWindowRowProperty().addListener((o, ov, nv) -> reposition.request());
+        viewModel.resolvedWayProperty().addListener((o, ov, nv) -> reposition.request());
         // Several labels are positioned relative to their own measured width; re-route once the
         // layout pass has actually sized them (getWidth() is 0 on the first connector pass).
         for (Label label : List.of(kpDown.getValueLabel(), kpDown.getBitsLabel(), tagValueLabel,
                 tagLeg.getBitsLabel(), indexLeg.getBitsLabel(), indexAcross.getValueLabel()))
-            label.widthProperty().addListener((o, ov, nv) -> reposition.run());
-        reposition.run();
+            label.widthProperty().addListener((o, ov, nv) -> reposition.request());
+        reposition.request();
 
         // ---- Highlight wires as their simulation step runs ---------------------------------
         bindActive(bodyView.activeProperty(), viewModel.lineActiveProperty(TlbLine.ADDRESS_TO_TLB));
@@ -508,10 +523,13 @@ public class PagedTLBTabView extends StackPane
         // resolved way's line + frame readout from this.
         if (setAssocBody != null) {
             setAssocBody.blockActiveProperty().bind(viewModel.lineActiveProperty(TlbLine.BLOCK_OUT));
-            // The stacked way-tables can run past the fixed canvas height -- let it grow so the
-            // ScrollPane can reach the lower tables and their block lines.
-            bodyNode.boundsInParentProperty().addListener((o, ov, nv) ->
-                    canvas.setPrefHeight(Math.max(CANVAS_HEIGHT, nv.getMaxY() + 120)));
+            // The stacked way-tables can run past the base design height -- let it grow so the
+            // whole stack (and so the workbench's scale-to-fit) accounts for the lower tables and
+            // their block lines. layoutBounds, not boundsInParent: the rows' fog BoxBlur inflates
+            // boundsInParent by a different amount depending on whether a lookup has run yet, which
+            // would make this minimum -- and with it the whole UI's scale -- flicker between steps.
+            bodyNode.layoutBoundsProperty().addListener((o, ov, nv) ->
+                    canvas.designHeightProperty().set(bodyNode.getLayoutY() + nv.getHeight() + SET_ASSOC_BLOCK_LINE_ALLOWANCE));
         }
 
         if (split) {
@@ -532,14 +550,10 @@ public class PagedTLBTabView extends StackPane
             viewModel.getVisibleRows().addListener((ListChangeListener<Row>) change -> updateRowData());
         updateRowData();
 
-        ScrollPane scrollPane = new ScrollPane(canvas);
-        scrollPane.getStyleClass().addAll("mmu-scroll-pane", "slim-scroll");
-        // Grows canvas to fill the viewport's real width when it's wider than MIN_CANVAS_WIDTH (never
-        // narrower -- canvas's own minWidth floors it there, so content still scrolls horizontally
-        // below that), which is what lets Physical Address's live binding actually reach the tab's
-        // true right edge instead of a fixed pixel canvas size -- matches PagedMMUTabView's ScrollPane.
-        scrollPane.setFitToWidth(true);
-        getChildren().add(scrollPane);
+        // Grows the canvas to fill the viewport (never below its design size), which is what lets
+        // Physical Address's live binding actually reach the tab's true right edge instead of a
+        // fixed pixel canvas size -- matches PagedMMUTabView.
+        mountCanvas();
         getChildren().add(buildSideNoteOverlay(viewModel));
     }
 
@@ -550,7 +564,7 @@ public class PagedTLBTabView extends StackPane
     // side-note treatment exactly, so it can never collide with the wiring above and stays visible
     // regardless of scroll position or which TLB body type (associative/direct/set-associative) is
     // mounted. The entry itself is rendered as an actual little table (reusing
-    // .page-table-view/.page-table-header/.page-table-row/.page-table-cell verbatim, the same way
+    // .data-table/.data-table-header/.data-table-row/.data-table-cell verbatim, the same way
     // every real TLB row in this tab is built) so it reads as "here is that entry," not another
     // line of step-description prose.
     private Node buildSideNoteOverlay(PagedTLBTabViewModel viewModel)
@@ -568,7 +582,7 @@ public class PagedTLBTabView extends StackPane
         dismissButton.getStyleClass().add("side-effect-note-dismiss");
         dismissButton.setOnAction(e -> viewModel.dismissSideNote());
 
-        HBox header = new HBox(6, headline, userLabel, spacer, dismissButton);
+        HBox header = new HBox(UiScale.px(6), headline, userLabel, spacer, dismissButton);
         header.getStyleClass().add("side-effect-note-header");
         header.setAlignment(Pos.CENTER_LEFT);
 
@@ -588,13 +602,13 @@ public class PagedTLBTabView extends StackPane
         HBox headerRow = new HBox(
                 tableCell("Index", indexWidth), tableCell("V", bitWidth), tableCell("D", bitWidth),
                 tableCell("Tag", tagWidth), tableCell("Block", blockWidth));
-        headerRow.getStyleClass().add("page-table-header");
+        headerRow.getStyleClass().add("data-table-header");
         HBox dataRow = new HBox(indexCell, vCell, dCell, tagCell, blockCell);
-        dataRow.getStyleClass().add("page-table-row");
+        dataRow.getStyleClass().add("data-table-row");
         VBox miniTable = new VBox(headerRow, dataRow);
-        miniTable.getStyleClass().add("page-table-view");
+        miniTable.getStyleClass().add("data-table");
 
-        VBox card = new VBox(6, header, miniTable);
+        VBox card = new VBox(UiScale.px(6), header, miniTable);
         card.getStyleClass().add("side-effect-note-card");
         // A Region's default max width/height is unbounded, so without capping both, StackPane
         // stretches this to fill the whole tab (exactly what happened before this fix).
@@ -627,7 +641,7 @@ public class PagedTLBTabView extends StackPane
     private Label tableCell(String text, double width)
     {
         Label label = new Label(text);
-        label.getStyleClass().add("page-table-cell");
+        label.getStyleClass().add("data-table-cell");
         label.setMinWidth(width);
         label.setPrefWidth(width);
         label.setMaxWidth(width);
@@ -657,8 +671,75 @@ public class PagedTLBTabView extends StackPane
         indexAcross.setVisible(splitAddress);
     }
 
+    // The narrowest the schematic can be drawn without the block output (the rising leg into PA
+    // Block, or the set-associative output bus beneath it) cutting through the table: the table's
+    // right edge, a run-out for the wire's own labels, PA Block's half-width, then PA Word flush to
+    // the margin. Measured from the first data row's real laid-out bounds -- which grow with the
+    // configured tag/block hex digits -- in canvas coordinates. Deliberately not from the body
+    // view's own width: the set-associative body's overlay reaches out to wherever PA Block sits,
+    // which would make this depend on the canvas's own width and chase its own tail.
+    //
+    // The row's preferred width (fixed cell widths, known at construction) is the fallback for a tab
+    // that hasn't been laid out yet -- e.g. one that has never been selected -- so the minimum is
+    // right from the start instead of jumping the whole UI's scale the first time it's opened. The
+    // table's left edge is the body node's own X in that case (the search-bus stubs live in the
+    // body's unmanaged overlay, outside its layout).
+    private void updateDesignWidth()
+    {
+        if (rowViews.isEmpty())
+            return;
+
+        PagedTLBRowView row = rowViews.get(0);
+        double tableRight = bodyNode.getLayoutX() + row.prefWidth(-1);
+        if (row.getScene() != null)
+        {
+            Bounds rowBounds = canvas.sceneToLocal(row.localToScene(row.getLayoutBounds()));
+            tableRight = Math.max(tableRight, rowBounds.getMaxX());
+        }
+        double needed = tableRight + BLOCK_WIRE_CLEARANCE + blockBoxPA.getPrefWidth() / 2.0
+                + paWordBoxWidth + MARGIN;
+        canvas.designWidthProperty().set(Math.max(MIN_CANVAS_WIDTH, needed));
+    }
+
+    // A set-associative TLB stacks one table per way, so the schematic's height grows with the way
+    // count. Asking the workbench to make room for all of them would shrink the whole UI (down to the
+    // minimum scale) to fit a tall stack, so it is asked for the top of the schematic plus a single
+    // way -- the same height the other TLB types need -- and the rest of the stack is scrolled to.
+    @Override
+    protected double heightToFit(double schematicHeight)
+    {
+        if (setAssocBody == null || bodyNode == null)
+            return schematicHeight;
+        return Math.min(schematicHeight,
+                bodyNode.getLayoutY() + setAssocBody.wayHeight() + SET_ASSOC_BLOCK_LINE_ALLOWANCE);
+    }
+
+    private void raise(Node... nodes)
+    {
+        for (Node node : nodes)
+            raiseOrder.add(node);
+    }
+
     private void updateConnectors()
     {
+        // Every wire the pass routes is lifted in one call at the end, not one raise per group: the
+        // address wires and the block wires would each find the other's on top of theirs and
+        // reshuffle the canvas's children on every pass (see SchematicCanvas.bringToFront).
+        raiseOrder.clear();
+        try {
+            routeConnectors();
+        } finally {
+            canvas.bringToFront(raiseOrder.toArray(Node[]::new));
+        }
+    }
+
+    private void routeConnectors()
+    {
+        // The wires below are routed to the body view's marker nodes; bring those up to date first
+        // rather than relying on the body's own job having run already (no guaranteed order).
+        bodyView.syncAnchors();
+        updateDesignWidth();
+
         if (canvas.getScene() == null)
             return;
 
@@ -687,6 +768,8 @@ public class PagedTLBTabView extends StackPane
                 // Bus + riser align to the bottom-middle of the PA Block box.
                 double busSceneX = canvas.localToScene(box.getCenterX(), 0).getX();
                 setAssocBody.blockLineEndXProperty().set(bodyNode.sceneToLocal(busSceneX, 0).getX());
+                // The output tap below moves with that end X, so let the body place it before it is read.
+                bodyView.syncAnchors();
 
                 Region tap = bodyView.tableBottomAnchorProperty().get();
                 if (tap != null && tap.getScene() != null) {
@@ -699,7 +782,7 @@ public class PagedTLBTabView extends StackPane
                     // blockUpNear above), so its own midpoint -- where its tag lands -- sits the same
                     // 20px below the box edge that wordUpPA's tag does, regardless of how far below
                     // the tap itself sits (which grows with the number of ways stacked).
-                    double riserNearStartY = intoY + 40;
+                    double riserNearStartY = intoY + UiScale.px(40);
 
                     blockRiserFar.startXProperty().set(riserX);
                     blockRiserFar.startYProperty().set(tapY);
@@ -711,8 +794,7 @@ public class PagedTLBTabView extends StackPane
                     blockRiserNear.endXProperty().set(riserX);
                     blockRiserNear.endYProperty().set(intoY);
 
-                    blockRiserFar.toFront();
-                    blockRiserNear.toFront();
+                    raise(blockRiserFar, blockRiserNear);
                 }
             }
             return;
@@ -733,6 +815,11 @@ public class PagedTLBTabView extends StackPane
             double dropY = tableBottomY + BLOCK_DROP;
             double boxX = box.getCenterX();
 
+            // The wire's lowest point is the schematic's bottom edge, so the design height is
+            // exactly that plus a margin -- CANVAS_HEIGHT is only the estimate used until this first
+            // runs.
+            canvas.designHeightProperty().set(dropY + MARGIN);
+
             blockDown.startXProperty().set(colX);
             blockDown.startYProperty().set(tableBottomY);
             blockDown.endXProperty().set(colX);
@@ -747,7 +834,7 @@ public class PagedTLBTabView extends StackPane
             // its own construction above), so its own midpoint -- where its tag lands -- sits the
             // same 20px below the box edge that wordUpPA's tag does, reading as "the same height"
             // even though the block wire's overall drop is much longer than the word wire's.
-            double blockUpNearStartY = box.getMaxY() + 40;
+            double blockUpNearStartY = box.getMaxY() + UiScale.px(40);
 
             blockUpFar.startXProperty().set(boxX);
             blockUpFar.startYProperty().set(dropY);
@@ -759,10 +846,7 @@ public class PagedTLBTabView extends StackPane
             blockUpNear.endXProperty().set(boxX);
             blockUpNear.endYProperty().set(box.getMaxY());
 
-            blockDown.toFront();
-            blockAcross.toFront();
-            blockUpFar.toFront();
-            blockUpNear.toFront();
+            raise(blockDown, blockAcross, blockUpFar, blockUpNear);
         }
     }
 
@@ -779,8 +863,7 @@ public class PagedTLBTabView extends StackPane
         tagAcross.endXProperty().set(busX);
         tagAcross.endYProperty().set(busY);
 
-        tagDown.toFront();
-        tagAcross.toFront();
+        raise(tagDown, tagAcross);
     }
 
     // Direct-mapped fork: brace tip -> a long k@p stem -> a fork bar with two parallel legs. The
@@ -832,7 +915,7 @@ public class PagedTLBTabView extends StackPane
         indexAcross.endXProperty().set(anchorX);
         indexAcross.endYProperty().set(anchorY);
 
-        toFront(kpDown, tagStub, tagLeg, tagValueLabel, indexStub, indexLeg, indexAcross);
+        raise(kpDown, tagStub, tagLeg, tagValueLabel, indexStub, indexLeg, indexAcross);
     }
 
     // Toggle the green/red hit-miss style classes on a node from the lookup outcome. Independent of
@@ -908,12 +991,6 @@ public class PagedTLBTabView extends StackPane
         wire.bitsProperty().set(bits);
         wire.labelOnLeftProperty().set(false);
         return wire;
-    }
-
-    private static void toFront(Node... nodes)
-    {
-        for (Node n : nodes)
-            n.toFront();
     }
 
     // Wire-borne value readouts only make sense once their step has actually run; blank them out

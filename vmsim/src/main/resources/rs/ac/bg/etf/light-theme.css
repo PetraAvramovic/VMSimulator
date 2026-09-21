@@ -1,17 +1,13 @@
 /* =========================================================================
-   FONT REGISTRATION
-   Bundled under fonts/ (SIL Open Font License -- see fonts/LICENSE-IBMPlex.txt).
-   One @font-face per weight, all under one family name, so -fx-font-weight
-   keywords/numbers elsewhere in this file keep resolving to the right file.
+   DESIGN-SIZE THEME
+
+   Every length in this file is written at the 1080p design size. The app never
+   loads it directly at any other size: view/util/UiScale rewrites every px
+   value below (through ThemeCss) for the current UI scale and loads that copy,
+   so text is drawn at its real size -- hinted and crisp -- instead of being
+   scaled up/down as an image. Keep lengths in plain px (no em/%), and keep
+   @font-face rules out of this file (they live in fonts.css).
    ========================================================================= */
-@font-face { font-family: "IBM Plex Sans"; font-weight: 400; src: url("fonts/IBMPlexSans-Regular.ttf"); }
-@font-face { font-family: "IBM Plex Sans"; font-weight: 500; src: url("fonts/IBMPlexSans-Medium.ttf"); }
-@font-face { font-family: "IBM Plex Sans"; font-weight: 600; src: url("fonts/IBMPlexSans-SemiBold.ttf"); }
-@font-face { font-family: "IBM Plex Sans"; font-weight: 700; src: url("fonts/IBMPlexSans-Bold.ttf"); }
-@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("fonts/IBMPlexMono-Regular.ttf"); }
-@font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("fonts/IBMPlexMono-Medium.ttf"); }
-@font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url("fonts/IBMPlexMono-SemiBold.ttf"); }
-@font-face { font-family: "IBM Plex Mono"; font-weight: 700; src: url("fonts/IBMPlexMono-Bold.ttf"); }
 
 .root {
     -fx-font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -99,13 +95,13 @@
 /* =========================================================================
    MAIN MENU CONTAINERS & TYPOGRAPHY
    ========================================================================= */
-.main-menu-container {
+.screen-container {
     -fx-alignment: center;
     -fx-spacing: 20px;
     -fx-padding: 50px;
 }
 
-.main-menu-title {
+.screen-title {
     -fx-font-size: 26px;
     -fx-font-weight: bold;
     -fx-text-fill: #2c3e50;
@@ -113,10 +109,22 @@
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 4, 0.0, 0, 2);
 }
 
-.main-menu-subtitle {
+/* The main menu has no subtitle under its title, so the title carries the extra room above the
+   buttons itself (the config screen's title is followed by its own .screen-subtitle instead). */
+.main-menu-title {
+    -fx-padding: 0 0 40px 0;
+}
+
+.screen-subtitle {
     -fx-font-size: 14px;
     -fx-text-fill: #7f8c8d; /* Muted gray description text */
     -fx-padding: 0 0 15 0;
+}
+
+/* One-line status under a screen's content, e.g. which config file the config screen was loaded from. */
+.screen-status {
+    -fx-font-size: 13px;
+    -fx-text-fill: #7f8c8d;
 }
 
 /* =========================================================================
@@ -148,7 +156,7 @@
    Config -- deliberately big, uniform-width action buttons. Every other button (e.g. the
    simulation view's small Previous/Next nav buttons) sizes to its own text instead, which the
    base .button rule above used to override for all of them with this same fixed width. */
-.menu-button {
+.button-large {
     -fx-pref-width: 240px;
     -fx-pref-height: 44px;
 }
@@ -176,14 +184,6 @@
     -fx-border-color: #2471a3;
 }
 
-.error-banner-label {
-    -fx-text-fill: #e74c3c;     /* Sharp error-red tone */
-    -fx-font-weight: bold;      /* Heavy emphasis alignment */
-    -fx-font-size: 13px;
-    -fx-padding: 5px 0 5px 0;   /* Vertical padding spacing cushion */
-}
-
-
 /* Configuration screen: the form content scrolls (rather than being clipped by the window) when
    the stage is shorter/narrower than the form's natural size, e.g. once the validation error
    banner below wraps to extra lines. Transparent chrome so it reads as part of the flat page,
@@ -197,36 +197,17 @@
     -fx-background-color: #eef0f2;
 }
 
-/* Base grid layout matrices spacing parameters */
-.form-grid-base {
+/* A column of labelled form fields: the config screen's columns and the settings screen's form. */
+.form-column {
     -fx-hgap: 15px;
     -fx-vgap: 12px;
     -fx-padding: 10px 0 10px 0;
 }
 
 /* Individual form labels padding */
-.form-grid-base .label {
+.form-column .label {
     -fx-font-size: 13px;
     -fx-text-fill: #34495e;
-}
-
-/* Elegant borders surrounding our sliding conditional architecture grids panels */
-.architecture-sub-form-box {
-    -fx-hgap: 15px;
-    -fx-vgap: 12px;
-    -fx-padding: 15px;
-    -fx-background-color: #ffffff;
-    -fx-border-color: #dcdde1;
-    -fx-border-width: 1px;
-    -fx-border-radius: 5px;
-    -fx-background-radius: 5px;
-    -fx-max-width: 520px;
-}
-
-.architecture-sub-form-box .label {
-    -fx-font-size: 13px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #2c3e50;
 }
 
 /* Input Fields TextBoxes Visual Polish */
@@ -240,6 +221,11 @@
     -fx-border-radius: 4px;
     -fx-background-radius: 4px;
     -fx-padding: 5px;
+    /* The placeholder ("0x... or decimal") and the selection highlight. Modena derives both as a
+       darker shade of the field's background; these are its own default expressions, spelled out
+       so a theme with a dark field can replace them (a darker-than-dark shade is invisible). */
+    -fx-prompt-text-fill: derive(-fx-control-inner-background, -30%);
+    -fx-highlight-fill: derive(-fx-control-inner-background, -20%);
 }
 
 .text-field:focused {
@@ -263,25 +249,73 @@
     -fx-border-color: #b5b8c0;
 }
 
+/* The rest of every ComboBox (Settings, Config, the inspector pickers, the editor windows): the value
+   shown in the closed box, its arrow, and the dropdown list with its cells -- spelled out here instead
+   of left to Modena. Modena colours them through lookups that are resolved up the scene graph, and a
+   dropdown that is restyled while it is closing (a theme change made from the Settings ComboBox itself
+   swaps the stylesheet under it) can't find them, so JavaFX logs a pair of warnings per cell. With the
+   text and background set to plain colours there is nothing left to look up. Sizes are Modena's own
+   (12px text, 3px 7px cell padding), written in px so they follow the UI scale. */
+.combo-box > .list-cell,
+.config-editor-combo > .list-cell {
+    -fx-font-size: 12px;
+    -fx-padding: 4px 0 4px 8px;
+    -fx-background-color: transparent;
+    -fx-text-fill: #2c3e50;
+}
+
+.combo-box > .arrow-button > .arrow {
+    -fx-background-color: #2c3e50;
+    -fx-background-insets: 0;
+}
+
+.combo-box-popup > .list-view {
+    -fx-background-color: #cccccc, #ffffff;    /* the field's border, then its surface */
+    -fx-background-insets: 0, 1;
+    -fx-padding: 1px;
+}
+
+.combo-box-popup .list-cell {
+    -fx-font-size: 12px;
+    -fx-padding: 3px 7px 3px 7px;
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #2c3e50;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #f1f2f6;
+}
+
+/* The option that is currently chosen. */
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #3498db;
+    -fx-text-fill: #ffffff;
+}
+
+.combo-box-popup .list-cell:filled:selected:hover {
+    -fx-background-color: #2980b9;
+}
+
 /* Centralized Error Display Output Banner Label */
 .error-banner-label {
-    -fx-text-fill: #e74c3c;
+    -fx-text-fill: #e74c3c;     /* Sharp error-red tone */
     -fx-font-weight: bold;
     -fx-font-size: 13px;
+    -fx-padding: 5px 0 5px 0;   /* Vertical padding spacing cushion */
     -fx-min-height: 20px;
     -fx-alignment: center;
 }
 
 /* Column header labels for configuration form, and every sidebar section title
    (Instructions/Virtual Address/Physical Address/Log/Step Description) in the simulation view. */
-.column-header {
+.section-title {
     -fx-font-weight: bold;
     -fx-font-size: 17px;
 }
 
 /* Buttons that open a bulk-data editor window from the config screen (Instructions, Page Table
    Entries, Initial Memory Content) -- sized to match the .text-field/.combo-box width above them
-   in the same form column, rather than the wide .menu-button primary actions. */
+   in the same form column, rather than the wide .button-large primary actions. */
 .config-section-button {
     -fx-pref-width: 180px;
     -fx-pref-height: 32px;
@@ -293,7 +327,7 @@
    muted glyph, same idea as the app's other icon-only controls (e.g. BackButton) -- so it reads as
    a row action rather than a standalone bordered control competing with the table itself; only
    turns red and gains a soft round backing on hover/press. */
-.row-delete-button {
+.config-editor-delete-button {
     -fx-min-width: 24px;
     -fx-pref-width: 24px;
     -fx-max-width: 24px;
@@ -311,12 +345,12 @@
     -fx-cursor: hand;
 }
 
-.row-delete-button:hover {
+.config-editor-delete-button:hover {
     -fx-background-color: #fdecea;
     -fx-text-fill: #e74c3c;
 }
 
-.row-delete-button:armed {
+.config-editor-delete-button:armed {
     -fx-background-color: #fbdcd9;
 }
 
@@ -325,7 +359,7 @@
    the row cell below it are sized from the exact same value (see
    ConfigEditorWindowSupport.sizeToColumn), so there's no Modena header-vs-cell padding to reconcile
    at all; this stylesheet only ever needs to draw colors/borders on top. Matches the same flat-card,
-   horizontal-divider-only look the schematic tabs' own tables use (.page-table-view/.frame-table-view).
+   horizontal-divider-only look the schematic tabs' own tables use (.data-table/.frame-table-view).
    .config-editor-card wraps the header row + the scrollable rows column as one bordered panel. */
 .config-editor-card {
     -fx-background-color: #ffffff;
@@ -348,7 +382,7 @@
     -fx-text-fill: #34495e;
     -fx-padding: 8px 14px 8px 14px;
     /* Centering is set directly via label.setAlignment(Pos.CENTER) in code, not here -- matching
-       WindowedTableView.headerCell(), which has no CSS alignment rule for .page-table-cell either. */
+       WindowedTableView.headerCell(), which has no CSS alignment rule for .data-table-cell either. */
 }
 
 /* Modena's default .scroll-pane carries its own built-in padding (and the .viewport inside it
@@ -431,6 +465,10 @@
     -fx-padding: 5px 8px 5px 8px;
     -fx-font-size: 13px;
     -fx-alignment: center;
+    /* ConfigEditorWindowSupport replaces this field's style classes, which drops Modena's
+       .text-input -- and with it the rule that gives the typed text a colour. Without this it
+       falls back to plain black: right on white, invisible on a dark theme. */
+    -fx-text-fill: -fx-text-inner-color;
 }
 
 .config-editor-field:focused {
@@ -515,7 +553,7 @@
     -fx-text-fill: #7f8c8d;
 }
 
-/* Current VA/PA value readouts below their .column-header label. */
+/* Current VA/PA value readouts below their .section-title label. */
 .sidebar-value-label {
     -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
     -fx-font-size: 17px;
@@ -546,7 +584,7 @@
     -fx-padding: 2px 8px 6px 0;
 }
 
-.instruction-list-header .page-table-cell {
+.instruction-list-header .data-table-cell {
     -fx-font-weight: bold;
     -fx-text-fill: #7f8c8d;
     -fx-font-size: 12px;
@@ -575,7 +613,7 @@
    SimulationView alongside "instruction-list-scroll") -- see the .slim-scroll rules near the top
    of this file. */
 
-/* One row: four .page-table-cell columns (Index/Op/User/VA) in an HBox -- hover/current-row
+/* One row: four .data-table-cell columns (Index/Op/User/VA) in an HBox -- hover/current-row
    accent lives on the row container now that a row is several cells, not one big label. Only
    vertical padding: a horizontal inset here (and not matched on the header's own cells) would
    leave the header a few pixels narrower than the scrollable rows beneath it, since the header
@@ -621,7 +659,7 @@
 /* Plain (not monospace) text -- these are prose descriptions, not columnar data like the
    Instructions/Frame/Page tables, so there's nothing for a fixed-width font to keep aligned;
    inherits the app's normal "Segoe UI" from .root. A subtle bottom border separates rows,
-   matching .frame-table-row/.page-table-row's own unintrusive divider. */
+   matching .frame-table-row/.data-table-row's own unintrusive divider. */
 .execution-log .list-cell {
     -fx-font-size: 13px;
     -fx-text-fill: #2c3e50;
@@ -660,53 +698,51 @@
     -fx-graphic-text-gap: 0;
 }
 
+/* The dot in a tab's header marking an off-window side effect the user hasn't seen yet
+   (SimulationView.attachNotificationBadge). */
+.tab-notification-badge {
+    -fx-fill: #3498db;
+}
+
 .step-counter-label {
     -fx-font-weight: bold;
     -fx-font-size: 15px;
 }
 
 /* =========================================================================
-   PAGED MMU TAB (address breakdown + windowed page table + connector line)
+   SCHEMATIC TABS (MMU / TLB / OS / Memory -- everything that extends SchematicTab, and the
+   pieces they share: field boxes, data tables, wires and their labels, headings)
    ========================================================================= */
-.mmu-tab-container {
+.schematic-tab {
     -fx-background-color: #ffffff;
-}
-
-.va-breakdown-box {
-    -fx-padding: 10px 18px 10px 18px;
-    -fx-background-color: #eef0f2;
-    -fx-border-color: #2c3e50;
-    -fx-border-width: 2px;
-    -fx-border-radius: 2px;
-    -fx-background-radius: 2px;
 }
 
 /* Adjacent fields (e.g. Page|Word) rendered as one continuous box: the left cell drops its right
    border so the two cells share a single divider line instead of a doubled-up border. */
-.va-breakdown-cell {
+.field-box-cell {
     -fx-background-color: #eef0f2;
     -fx-border-color: #2c3e50;
     -fx-border-width: 2px;
 }
 
-.va-breakdown-cell-left {
+.field-box-cell-left {
     -fx-border-width: 2px 0 2px 2px;
     -fx-background-radius: 2px 0 0 2px;
     -fx-border-radius: 2px 0 0 2px;
 }
 
-.va-breakdown-cell-right {
+.field-box-cell-right {
     -fx-background-radius: 0 2px 2px 0;
     -fx-border-radius: 0 2px 2px 0;
 }
 
 /* Standalone field (no adjacent neighbour, e.g. the TLB tab's Process box): full rounded border. */
-.va-breakdown-cell-solo {
+.field-box-cell-solo {
     -fx-background-radius: 2px;
     -fx-border-radius: 2px;
 }
 
-.va-breakdown-title {
+.field-box-title {
     -fx-font-size: 13px;
     -fx-text-fill: #7f8c8d;
 }
@@ -716,11 +752,11 @@
    and the "bold" keyword -- confirmed working, unlike the numeric values -- is too heavy. Rather
    than guess a third CSS value blind, FieldBoxes.valueCell() applies the SemiBold .ttf straight to
    the Label via Font.loadFont()+setFont(), so this class only controls color. */
-.va-breakdown-value {
+.field-box-value {
     -fx-text-fill: #2c3e50;
 }
 
-.page-table-view {
+.data-table {
     -fx-padding: 10px;
     -fx-background-color: #ffffff;
     -fx-border-color: #2c3e50;
@@ -730,83 +766,83 @@
 }
 
 /* The MMU schematic's inline preview (unlike the Inspector's WindowedTableView) needs its header
-   band to paint edge-to-edge under the card's own border -- .page-table-view's uniform padding
+   band to paint edge-to-edge under the card's own border -- .data-table's uniform padding
    would otherwise leave a blank white margin between the border and the header's background on
    three sides, reading as an outline instead of a filled band. Moving the inset from the shared
    card padding onto the header/rows individually keeps their content at the exact same x/y
    offsets (so column alignment and every connector-line anchor are unaffected) while letting the
    header's own background reach the border. */
-.page-table-view.page-table-inline {
+.data-table.data-table-schematic {
     -fx-padding: 0;
 }
 
-.page-table-inline > .page-table-header {
+.data-table-schematic > .data-table-header {
     -fx-padding: 0 10px 0 10px;
     -fx-background-radius: 2px 2px 0 0;
 }
 
-.page-table-inline > .page-table-rows {
+.data-table-schematic > .data-table-rows {
     -fx-padding: 0 10px 10px 10px;
 }
 
 /* Same "header background reaches the card's own border, no blank white margin" fix as
-   .page-table-inline above, minus that marker's 19px "schematic centrepiece" font enlargement --
-   for a .page-table-view that wants the flush-card look at the normal, shared .page-table-cell
+   .data-table-schematic above, minus that marker's 19px "schematic centrepiece" font enlargement --
+   for a .data-table that wants the flush-card look at the normal, shared .data-table-cell
    size (currently just MemoryTableView's own embedded preview). */
-.page-table-view.page-table-flush {
+.data-table.data-table-flush {
     -fx-padding: 0;
 }
 
-.page-table-flush > .page-table-header {
+.data-table-flush > .data-table-header {
     -fx-padding: 0 10px 0 10px;
     -fx-background-radius: 2px 2px 0 0;
 }
 
-.page-table-flush > .page-table-rows {
+.data-table-flush > .data-table-rows {
     -fx-padding: 0 10px 10px 10px;
 }
 
 /* The MMU schematic's small page-table preview opens the full-table inspector window on click; a
-   light border tint on hover signals that, without touching the base .page-table-view styling
+   light border tint on hover signals that, without touching the base .data-table styling
    also reused by the (non-clickable) inspector window's own table. */
-.page-table-clickable:hover {
+.data-table-clickable:hover {
     -fx-border-color: #3498db;
 }
 
 /* The TLB schematic's body (AssociativeTLBView/DirectTLBView/SetAssociativeTLBView) opens its own
-   full-TLB inspector window the same way .page-table-clickable does -- but its root (bodyNode) is
+   full-TLB inspector window the same way .data-table-clickable does -- but its root (bodyNode) is
    just a plain wrapper with no border of its own; the actual bordered panel(s) are its .tlb-table
    descendant(s) (one, or one per way for set-associative). Recolouring those in place, the same
-   way .page-table-clickable recolours the page table's own border, instead of drawing a border on
+   way .data-table-clickable recolours the page table's own border, instead of drawing a border on
    the wrapper itself, which read as a second outline floating around the real table rather than
    the table's own outline lighting up. */
-.tlb-clickable:hover .tlb-table {
+.tlb-body-clickable:hover .tlb-table {
     -fx-border-color: #3498db;
 }
 
 /* Root of PageTableInspectorWindow -- the app's standard off-white tab background. */
-.page-table-inspector {
+.inspector-root {
     -fx-background-color: #eef0f2;
 }
 
-.page-table-header {
+.data-table-header {
     -fx-background-color: #eef0f2;
     -fx-border-color: transparent transparent #2c3e50 transparent;
     -fx-border-width: 1px;
 }
 
-.page-table-header .page-table-cell {
+.data-table-header .data-table-cell {
     -fx-font-weight: bold;
     -fx-text-fill: #2c3e50;
 }
 
-.page-table-row {
+.data-table-row {
     -fx-padding: 4px 0 4px 0;
     -fx-border-color: transparent transparent #dcdde1 transparent;
     -fx-border-width: 1px;
 }
 
-.page-table-row-current {
+.data-table-row-current {
     -fx-background-color: #eaf4fc;
     -fx-border-color: #3498db;
     -fx-border-width: 1px;
@@ -816,46 +852,65 @@
 
 /* Suppresses the row right above the highlight's own plain bottom divider, which would otherwise
    sit flush against the highlight's top border and read as a stray line poking out of it. */
-.page-table-row-before-current {
+.data-table-row-before-current {
     -fx-border-color: transparent;
 }
 
-/* Arrow in the page table's left margin, pointing at the current-row highlight above. */
-/* A row addressing memory pinned by the kernel (page-table storage) -- same grey as
-   .os-frame-kernel's swatch, for cross-tab consistency. */
-.page-table-row-locked {
-    -fx-background-color: #c9ccd1;
+/* A row addressing memory pinned by the kernel (page-table storage) -- no background of its own, so
+   it sits on the table like any other row; only its text is greyed out, and hovering it shows a
+   "Locked" tooltip (see LockedRow / RowTooltip). */
+.data-table-row-locked .data-table-cell {
+    -fx-text-fill: #9aa1a7;
 }
 
-.page-table-cell {
+/* The tooltip a table row can show on hover (RowTooltip) -- e.g. "Locked" on a kernel-locked address. */
+.data-table-tooltip {
+    -fx-font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    -fx-font-size: 13px;
+    -fx-text-fill: #ffffff;
+    -fx-background-color: #2c3e50;
+    -fx-background-radius: 2px;
+    -fx-padding: 4px 8px 4px 8px;
+}
+
+.data-table-cell {
     -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
     -fx-font-size: 13px;
     -fx-text-fill: #2c3e50;
 }
 
 /* A WindowedTableColumn with an onClick action (e.g. a page's Disk cell opening that block's own
-   inspector window) -- reads as a plain .page-table-cell (no permanent colour setting it apart
+   inspector window) -- reads as a plain .data-table-cell (no permanent colour setting it apart
    from its neighbours) until hovered, when it turns the same blue accent every other clickable
    thing in the app uses, underlined too, to invite the click. */
-.page-table-cell-clickable:hover {
+.data-table-cell-clickable:hover {
     -fx-text-fill: #3498db;
     -fx-underline: true;
 }
 
+/* A binary bit cell (page table's V column, ...) reads its value at a glance -- same green/red
+   pair as .tlb-tag-hit/.tlb-tag-miss, so "set" and "hit" share one vocabulary across the app. */
+.data-table-cell-bit-set {
+    -fx-text-fill: #27ae60;
+}
+.data-table-cell-bit-clear {
+    -fx-text-fill: #e74c3c;
+}
+
 /* The MMU schematic's own PageTableView, and the TLB schematic's own row tables (AssociativeTLBView
    / DirectTLBView / SetAssociativeTLBView), read as their tab's centrepiece, so both are drawn
-   larger than the shared page-table-cell base every other table (OS/inspector) uses -- scoped
-   through the "page-table-inline" marker rather than changing the shared size for all of them.
+   larger than the shared data-table-cell base every other table (OS/inspector) uses -- scoped
+   through the "data-table-schematic" marker rather than changing the shared size for all of them.
    Matches WidthCalculator.LARGE_CELL_FONT_SIZE (19px); the column widths handed to WidthCalculator
    are computed at that same size, so keep the two in sync if either changes. Row padding grows a
    little too, to keep the row height proportionate to the bigger text -- two selectors since the
-   MMU table's row container is .page-table-rows but the TLB tables' is .tlb-table-rows. */
-.page-table-inline .page-table-cell {
+   MMU table's row container is .data-table-rows but the TLB tables' is .tlb-table-rows. */
+.data-table-schematic .data-table-cell {
     -fx-font-size: 19px;
 }
 
-.page-table-inline > .page-table-rows > .page-table-row,
-.page-table-inline > .tlb-table-rows > .page-table-row {
+.data-table-schematic > .data-table-rows > .data-table-row,
+.data-table-schematic > .tlb-table-rows > .data-table-row {
     -fx-padding: 7px 0 7px 0;
 }
 
@@ -870,24 +925,9 @@
     -fx-stroke-width: 2.0px;  /* Slightly thicker line gives a nice signal pulse */
 }
 
-.tlb-tab-view {
-    -fx-background-color: #ffffff;
-}
-
-.tlb-search-line {
-    -fx-stroke: #9d9fa1;
-    -fx-stroke-width: 1.5px;
-    -fx-fill: transparent;
-}
-
-.tlb-search-line:active {
-    -fx-stroke: #3498db;
-    -fx-stroke-width: 2.0px;
-}
-
 /* Bordered panel behind the TLB rows, matching the MMU tab's page table, so the search-bus
    stub lines terminate on a visible surface. Padding lives on the header/rows individually (see
-   .page-table-inline above for why) so the header's background reaches the border edge-to-edge
+   .data-table-schematic above for why) so the header's background reaches the border edge-to-edge
    instead of leaving a blank margin around it. */
 .tlb-table {
     -fx-padding: 0;
@@ -898,7 +938,7 @@
     -fx-background-radius: 2px;
 }
 
-.tlb-table > .page-table-header {
+.tlb-table > .data-table-header {
     -fx-padding: 0 10px 0 10px;
     -fx-background-radius: 2px 2px 0 0;
 }
@@ -936,21 +976,14 @@
 }
 
 /* Direct-mapped tag readout / bit-width tag on the split's left branch: green on a hit, red on a
-   miss (and through the refill); neutral .mmu-bit-value default before the lookup resolves. */
+   miss (and through the refill); neutral .wire-value-label default before the lookup resolves. */
 .tlb-tag-hit { -fx-text-fill: #27ae60; }
 .tlb-tag-miss { -fx-text-fill: #e74c3c; }
 
-/* Heading above each schematic block (VA / PA / Process) on the MMU and TLB tabs. */
-.mmu-section-label {
-    -fx-font-size: 17px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #2c3e50;
-}
-
-/* Title above a schematic's own address-lookup table -- "Page Table" (MMU tab) and "TLB" (TLB tab)
-   -- same bold/dark look as .mmu-section-label, under its own name since it's specifically the two
-   tables' titles rather than every schematic-block heading. */
-.table-title {
+/* Heading above a schematic block: the VA / PA / Process field boxes, a schematic's own
+   address-lookup table ("Page Table" on the MMU tab, "TLB" on the TLB tab), and the OS tab's
+   per-user summary / disk block inspector headers. */
+.schematic-heading {
     -fx-font-size: 17px;
     -fx-font-weight: bold;
     -fx-text-fill: #2c3e50;
@@ -958,25 +991,25 @@
 
 /* Set-associative TLB's per-way "Entry N" captions -- quiet, not a headline, since several of these
    stack one per way-table. */
-.tlb-table-title {
+.tlb-way-caption {
     -fx-font-size: 11px;
     -fx-font-weight: normal;
     -fx-text-fill: #9aa1a7;
 }
 
-.mmu-bit-width {
+.bit-width-label {
     -fx-font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
     -fx-font-size: 12px;
     -fx-text-fill: #7f8c8d;    /* Slate gray typography color */
 }
 
-/* Same quiet, non-bold style as .mmu-bit-width, just larger -- the superscript exponent character
+/* Same quiet, non-bold style as .bit-width-label, just larger -- the superscript exponent character
    renders too small to read at the wire tags' own 11px. */
-.mmu-bit-width.mmu-descriptor-size-label {
-    -fx-font-size: 15px;
+.bit-width-label.mmu-descriptor-size-label {
+    -fx-font-size: 18px;
 }
 
-.mmu-bit-value {
+.wire-value-label {
     -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
     -fx-font-size: 17px;
     -fx-font-weight: bold;
@@ -984,7 +1017,7 @@
 }
 
 
-.mmu-bit-value:active {
+.wire-value-label:active {
     -fx-text-fill: #3498db;
 }
 
@@ -1005,11 +1038,8 @@
 }
 
 /* =========================================================================
-   PAGED OS TAB (frame table + occupancy strip + disk box + FIFO queue)
+   PAGED OS TAB (frame table + occupancy strip + disk box + replacement queue)
    ========================================================================= */
-.os-tab-container {
-    -fx-background-color: #ffffff;
-}
 
 /* Frame table body: same panel treatment as the MMU tab's page table. */
 .frame-table-view {
@@ -1021,29 +1051,29 @@
     -fx-background-radius: 2px;
 }
 
-.frame-table-header {
+.data-table-header-muted {
     -fx-background-color: #eef0f2;
     -fx-border-color: transparent transparent #2c3e50 transparent;
     -fx-border-width: 1px;
 }
 
-.frame-table-header .page-table-cell {
+.data-table-header-muted .data-table-cell {
     -fx-font-weight: bold;
     -fx-text-fill: #7f8c8d;
 }
 
 /* Seek-a-frame bar above the header. */
-.os-frame-seek-bar {
+.data-table-seek-bar {
     -fx-padding: 0 0 6px 0;
 }
 
-.os-frame-seek {
+.data-table-seek-field {
     -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
     -fx-font-size: 12px;
     -fx-pref-height: 22px;
 }
 
-.os-frame-seek-error {
+.data-table-seek-error {
     -fx-border-color: #e74c3c;
     -fx-border-width: 1.5px;
 }
@@ -1063,12 +1093,12 @@
 }
 
 /* The frame a fault is about to evict -> amber (frame table only, on the imminent step). */
-.frame-table-row.os-row-victim {
+.frame-table-row.frame-table-row-victim {
     -fx-background-color: #fbeccb;
 }
 
 /* The frame being evicted right now -> red. */
-.frame-table-row.os-row-evicting {
+.frame-table-row.frame-table-row-evicting {
     -fx-background-color: #fbdbd6;
 }
 
@@ -1085,7 +1115,7 @@
 }
 
 /* Leading swatch on each row -- the per-frame occupancy strip; carries the next-victim marker. */
-.os-frame-swatch {
+.frame-swatch {
     -fx-border-color: #ffffff;
     -fx-border-width: 0 1px 0 0;
     -fx-text-fill: #b9791a;
@@ -1093,11 +1123,11 @@
     -fx-font-weight: bold;
 }
 
-.os-frame-free      { -fx-background-color: #eef0f2; }
-.os-frame-allocated { -fx-background-color: #4aa3df; }
-.os-frame-kernel    { -fx-background-color: #c9ccd1; }
-.os-frame-victim    { -fx-background-color: #f5d9a8; }
-.os-frame-evicting  { -fx-background-color: #f5b7b1; }
+.frame-swatch-free      { -fx-background-color: #eef0f2; }
+.frame-swatch-allocated { -fx-background-color: #4aa3df; }
+.frame-swatch-kernel    { -fx-background-color: #c9ccd1; }
+.frame-swatch-victim    { -fx-background-color: #f5d9a8; }
+.frame-swatch-evicting  { -fx-background-color: #f5b7b1; }
 
 /* Disk box: same white/blue framed card as the MMU tab's standalone value boxes. The cursor is
    bound in code to only turn to a hand while a transfer is in flight (":active" below), and the
@@ -1124,7 +1154,7 @@
     -fx-border-color: #2980b9;
 }
 
-.os-disk-summary {
+.status-caption {
     -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
     -fx-font-size: 11px;
     -fx-text-fill: #7f8c8d;
@@ -1133,10 +1163,10 @@
 /* MMU/TLB tab off-window side-effect notification (an evicted/victim entry's descriptor or TLB
    entry changing, which the addressed-key window has no row to show). A visibly bordered, tinted
    card -- unlike a plain white panel, this reads as an alert rather than blending into the tab's
-   own grey background -- wrapping a small .page-table-view/.page-table-header/.page-table-row
-   table of its own (built the exact same way the real tables are: same shared .page-table-cell
+   own grey background -- wrapping a small .data-table/.data-table-header/.data-table-row
+   table of its own (built the exact same way the real tables are: same shared .data-table-cell
    class), so the entry it describes reads as an actual table row, not a line of prose. Blue
-   accent (the same blue/light-blue pair as .page-table-row-current's own highlight) matches the
+   accent (the same blue/light-blue pair as .data-table-row-current's own highlight) matches the
    tab-header notification dot this card is explaining. */
 .side-effect-note-card {
     -fx-background-color: #eaf4fc;
@@ -1186,21 +1216,21 @@
     -fx-text-fill: #3498db;
 }
 
-/* FIFO replacement queue: a row of slots, each its own box (a small gap between them, not a
+/* Replacement (eviction-order) queue: a row of slots, each its own box (a small gap between them, not a
    joined strip) so it still reads as separate frames in a queue. Clickable -- opens
    ReplacementQueueInspectorWindow -- hence the hover cue. */
-.os-fifo-queue {
+.replacement-queue {
     -fx-padding: 6px 0 6px 0;
 }
 
-.os-fifo-queue:hover .os-fifo-slot {
+.replacement-queue:hover .replacement-queue-slot {
     -fx-border-color: #2980b9;
 }
 
-/* One frame's slot in the strip -- drawn larger than the shared .page-table-cell size other
+/* One frame's slot in the strip -- drawn larger than the shared .data-table-cell size other
    OS-tab tables use, since the queue only ever shows a handful of slots and reads better as a
    bigger, more legible strip rather than blending into the smaller table text. */
-.os-fifo-slot {
+.replacement-queue-slot {
     -fx-padding: 4px 12px 4px 12px;
     -fx-background-color: #eef0f2;
     -fx-border-color: #2c3e50;
@@ -1214,22 +1244,22 @@
 }
 
 /* Head slot while it is the imminent victim (memory full) -- same amber as the frame table's own
-   .os-frame-victim / .os-row-victim states for that same frame. */
-.os-fifo-slot-head {
+   .frame-swatch-victim / .frame-table-row-victim states for that same frame. */
+.replacement-queue-slot-head {
     -fx-background-color: #f5d9a8;
     -fx-border-color: #e0a63b;
     -fx-font-weight: bold;
 }
 
 /* Collapsed run of entries between the visible head-side/tail-side slots. */
-.os-fifo-ellipsis {
+.replacement-queue-ellipsis {
     -fx-text-fill: #9aa1a7;
     -fx-font-weight: bold;
 }
 
 /* HEAD / TAIL captions above the strip's end slots -- same quiet treatment FieldBoxes' own field
    titles use above their boxes. */
-.os-fifo-caption {
+.replacement-queue-caption {
     -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
     -fx-font-size: 12px;
     -fx-font-weight: bold;
@@ -1237,8 +1267,8 @@
 }
 
 /* Head row highlight in ReplacementQueueInspectorWindow's table, only while it's the imminent
-   victim (memory full) -- same colour as the strip's own .os-fifo-slot-head. */
-.os-fifo-row-head {
+   victim (memory full) -- same colour as the strip's own .replacement-queue-slot-head. */
+.replacement-queue-row-head {
     -fx-background-color: #f5d9a8;
 }
 

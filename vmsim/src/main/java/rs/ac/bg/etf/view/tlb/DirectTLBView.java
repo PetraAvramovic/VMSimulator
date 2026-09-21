@@ -2,7 +2,6 @@ package rs.ac.bg.etf.view.tlb;
 
 import java.util.List;
 
-import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -14,6 +13,8 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.UiScale;
 
 /**
  * Direct-mapped TLB body view: a windowed row table, like the MMU tab's page table. There is no
@@ -35,6 +36,7 @@ public class DirectTLBView extends StackPane implements TLBBodyView
     private final Region bottomAnchor = marker();
     private final BooleanProperty active = new SimpleBooleanProperty(false);
     private final ObjectProperty<Region> addressAnchor = new SimpleObjectProperty<>();
+    private final PostLayoutTask reposition = new PostLayoutTask(this, this::repositionAnchors);
     private final ObjectProperty<Region> tableBottomAnchor = new SimpleObjectProperty<>();
 
     public DirectTLBView(TLBRowView header, List<TLBRowView> rows, ObservableValue<Number> selectedWindowRow)
@@ -43,9 +45,9 @@ public class DirectTLBView extends StackPane implements TLBBodyView
         this.selectedWindowRow = selectedWindowRow;
 
         // A bordered panel behind the rows, matching AssociativeTLBView / the page table.
-        // "page-table-inline" scales it up to read as the same size as the MMU tab's own
+        // "data-table-schematic" scales it up to read as the same size as the MMU tab's own
         // PageTableView (see light-theme.css).
-        tableBox.getStyleClass().addAll("tlb-table", "page-table-inline");
+        tableBox.getStyleClass().addAll("tlb-table", "data-table-schematic");
         rowsBody.getStyleClass().add("tlb-table-rows");
         rowsBody.getChildren().addAll(rows);
         tableBox.getChildren().addAll(header, rowsBody);
@@ -57,21 +59,20 @@ public class DirectTLBView extends StackPane implements TLBBodyView
         addressAnchor.set(selectionAnchor);
         tableBottomAnchor.set(bottomAnchor);
 
-        Runnable reposition = () -> Platform.runLater(this::repositionAnchors);
-        sceneProperty().addListener((obs, oldVal, newVal) -> reposition.run());
-        widthProperty().addListener((obs, oldVal, newVal) -> reposition.run());
-        heightProperty().addListener((obs, oldVal, newVal) -> reposition.run());
+        sceneProperty().addListener((obs, oldVal, newVal) -> reposition.request());
+        widthProperty().addListener((obs, oldVal, newVal) -> reposition.request());
+        heightProperty().addListener((obs, oldVal, newVal) -> reposition.request());
         for (TLBRowView row : rows)
-            row.visibleProperty().addListener((obs, oldVal, newVal) -> reposition.run());
-        selectedWindowRow.addListener((obs, oldVal, newVal) -> reposition.run());
+            row.visibleProperty().addListener((obs, oldVal, newVal) -> reposition.request());
+        selectedWindowRow.addListener((obs, oldVal, newVal) -> reposition.request());
 
         active.addListener((obs, oldVal, newVal) -> {
             setFogged(!newVal);
-            reposition.run();
+            reposition.request();
         });
         setFogged(!active.get());
 
-        reposition.run();
+        reposition.request();
     }
 
     @Override
@@ -96,6 +97,12 @@ public class DirectTLBView extends StackPane implements TLBBodyView
     public BooleanProperty activeProperty()
     {
         return active;
+    }
+
+    @Override
+    public void syncAnchors()
+    {
+        reposition.runNow();
     }
 
     private void repositionAnchors()
@@ -139,7 +146,7 @@ public class DirectTLBView extends StackPane implements TLBBodyView
     // matching AssociativeTLBView and the page table.
     private void setFogged(boolean fogged)
     {
-        rowsBody.setEffect(fogged ? new BoxBlur(6, 6, 3) : null);
+        rowsBody.setEffect(fogged ? new BoxBlur(UiScale.px(6), UiScale.px(6), 3) : null);
         rowsBody.setOpacity(fogged ? 0.45 : 1.0);
     }
 

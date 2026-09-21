@@ -6,7 +6,7 @@ import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleLongProperty;
 
 /**
- * One editable row in the config screen's Initial Memory Content editor window: a single word
+ * One editable row in the config screen's Initial Page Content editor window: a single word
  * value pre-loaded at one offset of one user's page. Multiple rows sharing the same (userId, page)
  * are grouped back into one
  * {@link rs.ac.bg.etf.model.simulation.SimulationConfig.InitialPage}'s content map when launched --

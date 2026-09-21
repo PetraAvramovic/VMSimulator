@@ -9,6 +9,8 @@ public abstract class TLBEvictionStep<T extends SimulationContext> extends Simul
 {
     protected TLBEntry evicted;
     private boolean wasDirty = false;
+    // Where the evicted entry sits (flat index into the TLB's entries), for the description.
+    private int evictedSlot;
 
     protected TLBEvictionStep(T context)
     {
@@ -19,6 +21,12 @@ public abstract class TLBEvictionStep<T extends SimulationContext> extends Simul
     public abstract void writebackDirty();
     public abstract void undoWritebackDirty();
     public abstract SimulationStep<T> nextStep();
+
+    /** The user whose page table entry received the evicted entry's dirty bit; valid once {@link #writebackDirty()} has run. */
+    public abstract int getWritebackUser();
+
+    /** The page whose page table entry received the evicted entry's dirty bit; valid once {@link #writebackDirty()} has run. */
+    public abstract long getWritebackPage();
 
     @Override
     public SimulationStep<T> execute()
@@ -34,6 +42,7 @@ public abstract class TLBEvictionStep<T extends SimulationContext> extends Simul
         }
 
         int index = context.getTLB().getEntries().indexOf(evicted);
+        evictedSlot = index;
         context.setEvictedTlbEntry(evicted.getTag(), evicted.getBlock(), wasDirty, index);
 
         setAffectedComponents(wasDirty
@@ -59,13 +68,18 @@ public abstract class TLBEvictionStep<T extends SimulationContext> extends Simul
     {
         boolean direct = context.getTLB() instanceof DirectTLB;
 
+        // Which entry was given up, what it held, and the page (of which user) it makes room for.
+        StepDescription where = describeTlbSlot(evictedSlot);
+        long page = context.getAddressComponent();
+        int user = context.getCurrentInstruction().getUser();
+
         if (wasDirty)
             return new StepDescription(
                     direct ? StepDescriptionKey.TLB_REPLACED_DIRTY : StepDescriptionKey.TLB_EVICTED_DIRTY,
-                    evicted.getBlock());
+                    where, evicted.getBlock(), page, user, getWritebackPage(), getWritebackUser());
 
         return new StepDescription(
                 direct ? StepDescriptionKey.TLB_REPLACED : StepDescriptionKey.TLB_EVICTED,
-                evicted.getBlock());
+                where, evicted.getBlock(), page, user);
     }
 }

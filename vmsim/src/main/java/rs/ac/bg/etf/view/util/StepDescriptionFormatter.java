@@ -23,7 +23,15 @@ public final class StepDescriptionFormatter
 
         ResourceBundle bundle = ResourceBundle.getBundle(BUNDLE_BASE_NAME, locale);
         String pattern = bundle.getString(description.key().name());
-        return String.format(locale, pattern, description.args());
+
+        // An argument that is itself a StepDescription is a phrase (e.g. "TLB entry 1 (set 0)") to be
+        // worded in place, by the same rules.
+        Object[] args = description.args().clone();
+        for (int i = 0; i < args.length; i++)
+            if (args[i] instanceof StepDescription phrase)
+                args[i] = format(phrase, locale);
+
+        return String.format(locale, pattern, args);
     }
 
     public static String format(StepDescription description)

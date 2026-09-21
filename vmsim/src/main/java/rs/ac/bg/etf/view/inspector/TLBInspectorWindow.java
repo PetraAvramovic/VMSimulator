@@ -1,7 +1,10 @@
 package rs.ac.bg.etf.view.inspector;
 
+import rs.ac.bg.etf.view.util.UiScale;
 import java.util.List;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.beans.property.IntegerProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -18,6 +21,7 @@ import javafx.stage.Window;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
 import rs.ac.bg.etf.model.tlb.SetAssociativeTLB;
 import rs.ac.bg.etf.model.tlb.TLB;
+import rs.ac.bg.etf.view.util.InspectorWindows;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.view.util.WindowedTableColumn;
@@ -39,6 +43,9 @@ import rs.ac.bg.etf.view.util.WindowedTableView;
  */
 public class TLBInspectorWindow
 {
+    private final ChangeListener<Number> refreshOnStep;
+
+    // Design-size; scaled where they are used, inside build() (see InspectorWindows for the scale).
     private static final double PICKER_ROW_HEIGHT = 36;
     private static final double ROOT_PADDING = 12;
 
@@ -55,10 +62,14 @@ public class TLBInspectorWindow
         this.context = context;
         this.tlb = context.getTLB();
         this.setAssociativeTlb = tlb instanceof SetAssociativeTLB sat ? sat : null;
-        currentStepNumber.addListener((o, ov, nv) -> {
+        // Registered weakly on the (long-lived) simulation step property so this window can be garbage
+        // collected once the tab view that created it has been rebuilt for a new UI scale (see
+        // UiScale); this field is what keeps the listener alive for as long as the window itself is.
+        refreshOnStep = (o, ov, nv) -> {
             if (tableView != null)
                 tableView.refresh();
-        });
+        };
+        currentStepNumber.addListener(new WeakChangeListener<>(refreshOnStep));
     }
 
     /** Opens the window, or closes it if already open -- a second click on the schematic's TLB
@@ -71,7 +82,7 @@ public class TLBInspectorWindow
             return;
         }
         if (stage == null)
-            stage = build(owner);
+            stage = InspectorWindows.build(() -> build(owner));
         stage.show();
         stage.toFront();
     }
@@ -81,15 +92,18 @@ public class TLBInspectorWindow
         tableView = new WindowedTableView<>(tlbColumns(), "entry");
         VBox.setVgrow(tableView, Priority.ALWAYS);
 
-        VBox root = new VBox(8);
-        root.getStyleClass().add("page-table-inspector");
-        root.setPadding(new Insets(ROOT_PADDING));
+        double pickerRowHeight = UiScale.px(PICKER_ROW_HEIGHT);
+        double rootPadding = UiScale.px(ROOT_PADDING);
+
+        VBox root = new VBox(UiScale.px(8));
+        root.getStyleClass().add("inspector-root");
+        root.setPadding(new Insets(rootPadding));
 
         double pickerHeight = 0;
         if (setAssociativeTlb != null)
         {
             Label wayLabel = new Label("Way");
-            wayLabel.getStyleClass().add("va-breakdown-title");
+            wayLabel.getStyleClass().add("field-box-title");
 
             wayPicker = new ComboBox<>();
             for (int way = 0; way < setAssociativeTlb.getEntriesPerSet(); way++)
@@ -99,12 +113,12 @@ public class TLBInspectorWindow
                     selectWay(nv);
             });
 
-            HBox pickerBar = new HBox(8, wayLabel, wayPicker);
+            HBox pickerBar = new HBox(UiScale.px(8), wayLabel, wayPicker);
             pickerBar.setAlignment(Pos.CENTER_LEFT);
-            pickerBar.setMinHeight(PICKER_ROW_HEIGHT);
-            pickerBar.setPrefHeight(PICKER_ROW_HEIGHT);
+            pickerBar.setMinHeight(pickerRowHeight);
+            pickerBar.setPrefHeight(pickerRowHeight);
             root.getChildren().addAll(pickerBar, tableView);
-            pickerHeight = PICKER_ROW_HEIGHT + 8; // + the root VBox's own spacing
+            pickerHeight = pickerRowHeight + UiScale.px(8); // + the root VBox's own spacing
         }
         else
         {
@@ -118,12 +132,12 @@ public class TLBInspectorWindow
             s.initOwner(owner);
         s.setTitle("TLB Inspector");
 
-        Scene scene = new Scene(root, 460, 420);
-        scene.getStylesheets().add(getClass().getResource("/rs/ac/bg/etf/light-theme.css").toExternalForm());
+        Scene scene = new Scene(root, UiScale.px(460), UiScale.px(420));
+        UiScale.applyTheme(scene);
         s.setScene(scene);
 
-        s.setMinWidth(tableView.minimumWidth() + 2 * ROOT_PADDING);
-        s.setMinHeight(pickerHeight + tableView.minimumHeight() + 2 * ROOT_PADDING + 8);
+        s.setMinWidth(tableView.minimumWidth() + 2 * rootPadding);
+        s.setMinHeight(pickerHeight + tableView.minimumHeight() + 2 * rootPadding + UiScale.px(8));
 
         if (setAssociativeTlb != null)
             wayPicker.getSelectionModel().select(Integer.valueOf(0));

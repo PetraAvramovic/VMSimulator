@@ -10,7 +10,13 @@ public abstract class TLBLookupStep<T extends SimulationContext> extends Simulat
 {
     private TLBEntry lastLookupResult;
 
-    protected TLBLookupStep(T context) 
+    // What was looked up, captured in execute() for the description: the user and page the key was
+    // built from, and the full key itself.
+    private int lookedUpUser;
+    private long lookedUpComponent;
+    private long lookedUpKey;
+
+    protected TLBLookupStep(T context)
     {
         super(context);
     }
@@ -29,8 +35,9 @@ public abstract class TLBLookupStep<T extends SimulationContext> extends Simulat
         long tag = tlb.calculateTag(user, addressComponent);
         TLBEntry entry = tlb.lookup(tag);
 
-        
-        
+        lookedUpUser = user;
+        lookedUpComponent = addressComponent;
+        lookedUpKey = tag;
         lastLookupResult = entry;
 
         setAffectedComponents(SimulationComponent.TLB);
@@ -48,8 +55,26 @@ public abstract class TLBLookupStep<T extends SimulationContext> extends Simulat
     public StepDescription getStepDescription()
     {
         return lastLookupResult != null
-                ? new StepDescription(StepDescriptionKey.TLB_LOOKUP_HIT, lastLookupResult.getBlock())
-                : new StepDescription(StepDescriptionKey.TLB_LOOKUP_MISS);
+                ? new StepDescription(StepDescriptionKey.TLB_LOOKUP_HIT, lookedUpComponent, lookedUpUser,
+                        describeTlbEntry(lastLookupResult), lastLookupResult.getBlock())
+                : new StepDescription(StepDescriptionKey.TLB_LOOKUP_MISS, lookedUpComponent, lookedUpUser,
+                        describeSearched());
+    }
+
+    // What the key was compared against: the one entry a direct-mapped TLB maps it to, the one set of a
+    // set-associative TLB, or every entry of a fully-associative one.
+    private StepDescription describeSearched()
+    {
+        TLB tlb = context.getTLB();
+
+        int slot = tlb.mappedSlot(lookedUpKey);
+        if (slot >= 0)
+            return describeTlbSlot(slot);
+
+        int set = tlb.setIndexOf(lookedUpKey);
+        return set >= 0
+                ? new StepDescription(StepDescriptionKey.TLB_SEARCHED_SET, set)
+                : new StepDescription(StepDescriptionKey.TLB_SEARCHED_ALL);
     }
 
 }

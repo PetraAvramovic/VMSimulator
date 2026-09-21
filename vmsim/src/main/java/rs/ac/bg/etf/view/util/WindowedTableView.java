@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 
-import javafx.application.Platform;
 import javafx.beans.property.LongProperty;
 import javafx.beans.property.SimpleLongProperty;
 import javafx.geometry.Insets;
@@ -38,18 +37,21 @@ import javafx.scene.layout.VBox;
  */
 public class WindowedTableView<R> extends VBox
 {
-    public static final double ROW_HEIGHT = 24;
     public static final int MIN_VISIBLE_ROWS = 3;
-
-    private static final double BAR_WIDTH = 12;
-    private static final double SEEK_BAR_HEIGHT = 30;
     private static final int WHEEL_STEP = 3;
-    // .page-table-view's own uniform 10px padding + 1px border, on every side (rounded up):
+
+    // Design-size lengths, scaled to the UI scale this table is built at (the screen is rebuilt when
+    // the scale changes, so they are fixed for this instance's lifetime -- hence instance fields).
+    private final double ROW_HEIGHT = UiScale.px(24);
+    private final double BAR_WIDTH = UiScale.px(12);
+    private final double SEEK_BAR_HEIGHT = UiScale.px(30);
+    private final double SEEK_BAR_SPACING = UiScale.px(8);
+    // .data-table's own uniform 10px padding + 1px border, on every side (rounded up):
     // reserved on all four edges, so it has to come off both the width and height budgets, and --
     // critically -- off onResize()'s own live "how many rows actually fit" measurement too, or a
     // row can be judged to fit when the padding/border is actually already claiming that space,
     // spilling the last row's box past the panel's own drawn border.
-    private static final double PANEL_CHROME = 24;
+    private final double PANEL_CHROME = UiScale.px(24);
 
     private final List<WindowedTableColumn<R>> columns;
     private final VBox rowsBox = new VBox();
@@ -62,6 +64,7 @@ public class WindowedTableView<R> extends VBox
     private final LongProperty windowStart = new SimpleLongProperty(0);
     private WindowedRowSource<R> rowSource = emptySource();
     private final Function<R, String> rowStyleClassFn;
+    private final Function<R, String> rowTooltipFn;
 
     private int rowsShown = MIN_VISIBLE_ROWS;
     private boolean syncingScrollBar = false;
@@ -85,10 +88,22 @@ public class WindowedTableView<R> extends VBox
      */
     public WindowedTableView(List<WindowedTableColumn<R>> columns, String entryNoun, Function<R, String> rowStyleClassFn)
     {
+        this(columns, entryNoun, rowStyleClassFn, null);
+    }
+
+    /**
+     * @param rowTooltipFn optional per-row function returning the tooltip text to show while the
+     *                     pointer is over the row (or null for no tooltip on that row), e.g. "Locked"
+     *                     for a kernel-locked address; null if the table has no such notion.
+     */
+    public WindowedTableView(List<WindowedTableColumn<R>> columns, String entryNoun,
+            Function<R, String> rowStyleClassFn, Function<R, String> rowTooltipFn)
+    {
         this.columns = columns;
         this.rowStyleClassFn = rowStyleClassFn;
+        this.rowTooltipFn = rowTooltipFn;
         this.seekBarHeight = entryNoun != null ? SEEK_BAR_HEIGHT : 0;
-        getStyleClass().add("page-table-view");
+        getStyleClass().add("data-table");
         setFocusTraversable(true);
 
         if (entryNoun != null)
@@ -98,8 +113,11 @@ public class WindowedTableView<R> extends VBox
         setMinWidth(minimumWidth());
         setMinHeight(minimumHeight());
 
-        heightProperty().addListener((o, ov, nv) -> Platform.runLater(this::onResize));
-        Platform.runLater(this::onResize);
+        // How many rows fit depends on the laid-out height, so it is worked out right after the layout
+        // pass (merged when the height changes several times in one) -- not a frame later.
+        PostLayoutTask resize = new PostLayoutTask(this, this::onResize, false);
+        heightProperty().addListener((o, ov, nv) -> resize.request());
+        resize.request();
     }
 
     /** Swaps the data source (e.g. a different user's page table), resetting the scroll position. */
@@ -149,19 +167,19 @@ public class WindowedTableView<R> extends VBox
     private HBox buildSeekBar(String entryNoun)
     {
         Label label = new Label("Go to " + entryNoun);
-        label.getStyleClass().add("page-table-cell");
-        seekField.getStyleClass().add("os-frame-seek");
+        label.getStyleClass().add("data-table-cell");
+        seekField.getStyleClass().add("data-table-seek-field");
         seekField.setPromptText("0x… or decimal");
         seekField.setPrefColumnCount(9);
         seekField.setOnAction(e -> seek());
         seekField.textProperty().addListener((o, ov, nv) -> {
-            seekField.getStyleClass().remove("os-frame-seek-error");
+            seekField.getStyleClass().remove("data-table-seek-error");
             seekStatus.setText("");
         });
-        seekStatus.getStyleClass().add("os-disk-summary");
+        seekStatus.getStyleClass().add("status-caption");
 
-        HBox bar = new HBox(8, label, seekField, seekStatus);
-        bar.getStyleClass().add("os-frame-seek-bar");
+        HBox bar = new HBox(SEEK_BAR_SPACING, label, seekField, seekStatus);
+        bar.getStyleClass().add("data-table-seek-bar");
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMinHeight(SEEK_BAR_HEIGHT);
         bar.setPrefHeight(SEEK_BAR_HEIGHT);
@@ -170,7 +188,7 @@ public class WindowedTableView<R> extends VBox
 
     private HBox buildHeader()
     {
-        header.getStyleClass().add("frame-table-header");
+        header.getStyleClass().add("data-table-header-muted");
         header.setPrefHeight(ROW_HEIGHT);
         // Reserve the scrollbar's width unconditionally (not just while it's actually visible) so
         // the header never visibly shifts as the row count/entry count changes.
@@ -261,15 +279,15 @@ public class WindowedTableView<R> extends VBox
             flagSeekError("out of range (0 .. " + (entryCount - 1) + ")");
             return;
         }
-        seekField.getStyleClass().remove("os-frame-seek-error");
+        seekField.getStyleClass().remove("data-table-seek-error");
         seekStatus.setText("");
         setWindowStart(target - rowsShown / 2);
     }
 
     private void flagSeekError(String message)
     {
-        if (!seekField.getStyleClass().contains("os-frame-seek-error"))
-            seekField.getStyleClass().add("os-frame-seek-error");
+        if (!seekField.getStyleClass().contains("data-table-seek-error"))
+            seekField.getStyleClass().add("data-table-seek-error");
         seekStatus.setText(message);
     }
 
@@ -303,7 +321,7 @@ public class WindowedTableView<R> extends VBox
     private Label headerCell(String text, double width)
     {
         Label label = new Label(text);
-        label.getStyleClass().add("page-table-cell");
+        label.getStyleClass().add("data-table-cell");
         label.setPrefWidth(width);
         label.setAlignment(Pos.CENTER);
         return label;
@@ -323,6 +341,7 @@ public class WindowedTableView<R> extends VBox
     {
         final HBox box = new HBox();
         final List<Label> cells = new ArrayList<>();
+        final RowTooltip tooltip = new RowTooltip(box);
         String appliedStyleClass;
         // The row currently bound to this pooled node -- a column's onClick fires against whatever
         // that is *at click time*, since the same Label is reused for a different row as the window
@@ -331,7 +350,7 @@ public class WindowedTableView<R> extends VBox
 
         RowNode()
         {
-            box.getStyleClass().add("page-table-row");
+            box.getStyleClass().add("data-table-row");
             box.setAlignment(Pos.CENTER_LEFT);
             box.setMinHeight(ROW_HEIGHT);
             box.setPrefHeight(ROW_HEIGHT);
@@ -339,12 +358,12 @@ public class WindowedTableView<R> extends VBox
             for (WindowedTableColumn<R> column : columns)
             {
                 Label cell = new Label();
-                cell.getStyleClass().add("page-table-cell");
+                cell.getStyleClass().add("data-table-cell");
                 cell.setPrefWidth(column.width());
                 cell.setAlignment(Pos.CENTER);
                 if (column.onClick() != null)
                 {
-                    cell.getStyleClass().add("page-table-cell-clickable");
+                    cell.getStyleClass().add("data-table-cell-clickable");
                     cell.setCursor(Cursor.HAND);
                     cell.setOnMouseClicked(e -> {
                         if (currentRow != null)
@@ -374,6 +393,8 @@ public class WindowedTableView<R> extends VBox
                     box.getStyleClass().add(styleClass);
                 appliedStyleClass = styleClass;
             }
+
+            tooltip.set(rowTooltipFn != null ? rowTooltipFn.apply(row) : null);
         }
 
         void hide()
@@ -381,6 +402,7 @@ public class WindowedTableView<R> extends VBox
             box.setVisible(false);
             box.setManaged(false);
             currentRow = null;
+            tooltip.set(null);
             if (appliedStyleClass != null)
                 box.getStyleClass().remove(appliedStyleClass);
             appliedStyleClass = null;

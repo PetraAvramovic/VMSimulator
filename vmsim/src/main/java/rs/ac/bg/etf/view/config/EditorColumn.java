@@ -3,6 +3,7 @@ package rs.ac.bg.etf.view.config;
 import java.util.function.Consumer;
 
 import javafx.scene.layout.Region;
+import rs.ac.bg.etf.view.util.UiScale;
 
 /**
  * One column of a config editor window's hand-rolled table (see {@link ConfigEditorWindowSupport}):
@@ -18,10 +19,11 @@ final class EditorColumn<T>
     final double width;
     final CellBuilder<T> cellFactory;
 
+    /** @param width design-size column width; scaled to the current UI scale here, once */
     EditorColumn(String header, double width, CellBuilder<T> cellFactory)
     {
         this.header = header;
-        this.width = width;
+        this.width = UiScale.px(width);
         this.cellFactory = cellFactory;
     }
 

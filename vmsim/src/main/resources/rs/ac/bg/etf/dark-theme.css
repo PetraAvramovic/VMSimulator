@@ -1,0 +1,1046 @@
+/* =========================================================================
+   DARK THEME -- DESIGN-SIZE
+
+   The dark counterpart of light-theme.css: the same style classes, in the same
+   order, with the same sizes, spacing and fonts -- only the colours differ. That
+   is what lets the theme be switched at runtime without rebuilding a screen
+   (see view/util/UiScale). Every class is documented in light-theme.css; keep
+   the two files in step: adding, renaming or resizing a class in one means
+   doing the same in the other.
+
+   The same rules as the light theme apply otherwise: lengths in plain px (they
+   are rewritten for the UI scale by ThemeCss), and no @font-face (fonts.css).
+
+   Palette: chrome #1a1d21 < surface #23272d < raised #2c3239; text #e6eaee,
+   muted #98a3ad; accent blue #4aa3df (#3498db as a fill).
+   ========================================================================= */
+
+.root {
+    -fx-font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -fx-background-color: #1a1d21;
+    -fx-text-base-color: #e6eaee;
+
+    /* The controls this stylesheet does not restyle itself (TabPane, SplitPane, ScrollPane, the
+       ComboBox popup...) come from JavaFX's own Modena theme, which is light unless told
+       otherwise: it derives all of their colours from these few. -fx-background is what a
+       ScrollPane's viewport and the selected tab are painted with, so it is the tab surface. */
+    -fx-base: #2c3239;
+    -fx-background: #23272d;
+    -fx-control-inner-background: #23272d;
+    -fx-control-inner-background-alt: #292e35;
+    -fx-text-background-color: #e6eaee;
+    -fx-text-inner-color: #e6eaee;
+    -fx-accent: #3498db;
+    -fx-focus-color: #4aa3df;
+    -fx-faint-focus-color: #4aa3df33;
+}
+
+/* =========================================================================
+   SHARED MINIMAL SCROLLBAR
+   ========================================================================= */
+.slim-scroll .scroll-bar:vertical,
+.slim-scroll .scroll-bar:horizontal,
+.scroll-bar.slim-scroll:vertical,
+.scroll-bar.slim-scroll:horizontal {
+    -fx-background-color: transparent;
+}
+
+.slim-scroll .scroll-bar:vertical,
+.scroll-bar.slim-scroll:vertical {
+    -fx-padding: 2px 1px 2px 0;
+    -fx-pref-width: 8px;
+}
+
+.slim-scroll .scroll-bar:horizontal,
+.scroll-bar.slim-scroll:horizontal {
+    -fx-padding: 0 2px 1px 2px;
+    -fx-pref-height: 8px;
+}
+
+.slim-scroll .scroll-bar .track,
+.slim-scroll .scroll-bar .track-background,
+.scroll-bar.slim-scroll .track,
+.scroll-bar.slim-scroll .track-background {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.slim-scroll .scroll-bar .thumb,
+.scroll-bar.slim-scroll .thumb {
+    -fx-background-color: #464d57;
+    -fx-background-radius: 4px;
+    -fx-background-insets: 0;
+}
+
+.slim-scroll .scroll-bar .thumb:hover,
+.slim-scroll .scroll-bar .thumb:pressed,
+.scroll-bar.slim-scroll .thumb:hover,
+.scroll-bar.slim-scroll .thumb:pressed {
+    -fx-background-color: #5e6772;
+}
+
+.slim-scroll .scroll-bar .increment-button,
+.slim-scroll .scroll-bar .decrement-button,
+.scroll-bar.slim-scroll .increment-button,
+.scroll-bar.slim-scroll .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-pref-height: 0;
+    -fx-pref-width: 0;
+}
+
+.slim-scroll .scroll-bar .increment-arrow,
+.slim-scroll .scroll-bar .decrement-arrow,
+.scroll-bar.slim-scroll .increment-arrow,
+.scroll-bar.slim-scroll .decrement-arrow {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+    -fx-shape: none;
+}
+
+/* =========================================================================
+   MAIN MENU CONTAINERS & TYPOGRAPHY
+   ========================================================================= */
+.screen-container {
+    -fx-alignment: center;
+    -fx-spacing: 20px;
+    -fx-padding: 50px;
+}
+
+.screen-title {
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #e6eaee;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 4, 0.0, 0, 2);
+}
+
+.main-menu-title {
+    -fx-padding: 0 0 40px 0;
+}
+
+.screen-subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: #98a3ad;
+    -fx-padding: 0 0 15 0;
+}
+
+.screen-status {
+    -fx-font-size: 13px;
+    -fx-text-fill: #98a3ad;
+}
+
+/* =========================================================================
+   INTERACTIVE BUTTON COMPONENT STYLING
+   ========================================================================= */
+.button {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+    -fx-padding: 10px 18px 10px 18px;
+    -fx-background-radius: 6px;
+    -fx-background-insets: 0;
+    -fx-border-color: #3a4048;
+    -fx-border-width: 1px;
+    -fx-border-radius: 6px;
+    -fx-background-color: #2c3239;
+    -fx-text-fill: #e6eaee;
+}
+
+.button-large {
+    -fx-pref-width: 240px;
+    -fx-pref-height: 44px;
+}
+
+.button:hover {
+    -fx-background-color: #38404a;
+    -fx-border-color: #5b6470;
+}
+
+.button:armed {
+    -fx-background-color: #242a30;
+}
+
+.button-primary {
+    -fx-background-color: #3498db;
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #2980b9;
+}
+
+.button-primary:hover {
+    -fx-background-color: #2980b9;
+    -fx-border-color: #2471a3;
+}
+
+.config-scroll,
+.config-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.config-root {
+    -fx-background-color: #1a1d21;
+}
+
+.form-column {
+    -fx-hgap: 15px;
+    -fx-vgap: 12px;
+    -fx-padding: 10px 0 10px 0;
+}
+
+.form-column .label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #cfd6dd;
+}
+
+.text-field {
+    -fx-pref-width: 180px;
+    -fx-pref-height: 32px;
+    -fx-background-color: #23272d;
+    -fx-background-insets: 0;
+    -fx-border-color: #454c56;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 5px;
+    -fx-prompt-text-fill: #7b858f;
+    -fx-highlight-fill: #2f5f8a;
+}
+
+.text-field:focused {
+    -fx-border-color: #4aa3df;
+    -fx-effect: dropshadow(three-pass-box, rgba(74,163,223,0.35), 4, 0, 0, 0);
+}
+
+.combo-box {
+    -fx-pref-width: 180px;
+    -fx-pref-height: 32px;
+    -fx-background-color: #23272d;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4px;
+    -fx-border-color: #454c56;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+}
+
+.combo-box:hover {
+    -fx-border-color: #5b6470;
+}
+
+.combo-box > .list-cell,
+.config-editor-combo > .list-cell {
+    -fx-font-size: 12px;
+    -fx-padding: 4px 0 4px 8px;
+    -fx-background-color: transparent;
+    -fx-text-fill: #e6eaee;
+}
+
+.combo-box > .arrow-button > .arrow {
+    -fx-background-color: #e6eaee;
+    -fx-background-insets: 0;
+}
+
+.combo-box-popup > .list-view {
+    -fx-background-color: #454c56, #23272d;
+    -fx-background-insets: 0, 1;
+    -fx-padding: 1px;
+}
+
+.combo-box-popup .list-cell {
+    -fx-font-size: 12px;
+    -fx-padding: 3px 7px 3px 7px;
+    -fx-background-color: #23272d;
+    -fx-text-fill: #e6eaee;
+}
+
+.combo-box-popup .list-cell:filled:hover {
+    -fx-background-color: #38404a;
+}
+
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: #3498db;
+    -fx-text-fill: #ffffff;
+}
+
+.combo-box-popup .list-cell:filled:selected:hover {
+    -fx-background-color: #2980b9;
+}
+
+.error-banner-label {
+    -fx-text-fill: #f0655a;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-padding: 5px 0 5px 0;
+    -fx-min-height: 20px;
+    -fx-alignment: center;
+}
+
+.section-title {
+    -fx-font-weight: bold;
+    -fx-font-size: 17px;
+}
+
+.config-section-button {
+    -fx-pref-width: 180px;
+    -fx-pref-height: 32px;
+    -fx-font-size: 12px;
+}
+
+.config-editor-delete-button {
+    -fx-min-width: 24px;
+    -fx-pref-width: 24px;
+    -fx-max-width: 24px;
+    -fx-min-height: 24px;
+    -fx-pref-height: 24px;
+    -fx-max-height: 24px;
+    -fx-padding: 0;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-background-radius: 12px;
+    -fx-border-radius: 12px;
+    -fx-text-fill: #6f7883;
+    -fx-cursor: hand;
+}
+
+.config-editor-delete-button:hover {
+    -fx-background-color: #3d2326;
+    -fx-text-fill: #f0655a;
+}
+
+.config-editor-delete-button:armed {
+    -fx-background-color: #4c2b2f;
+}
+
+.config-editor-card {
+    -fx-background-color: #23272d;
+    -fx-border-color: #3a4048;
+    -fx-border-width: 1px;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+}
+
+.config-editor-header-row {
+    -fx-background-color: #2a2f36;
+    -fx-border-color: transparent transparent #3a4048 transparent;
+    -fx-border-width: 0 0 1px 0;
+    -fx-background-radius: 6px 6px 0 0;
+}
+
+.config-editor-header-cell {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #cfd6dd;
+    -fx-padding: 8px 14px 8px 14px;
+
+}
+
+.config-editor-rows-scroll,
+.config-editor-rows-scroll > .viewport {
+    -fx-background-color: #23272d;
+    -fx-background-radius: 0 0 6px 6px;
+    -fx-padding: 0;
+    -fx-background-insets: 0;
+}
+
+.config-editor-row {
+    -fx-background-color: #23272d;
+    -fx-border-color: transparent transparent #2a2f36 transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.config-editor-row:hover {
+    -fx-background-color: #292e35;
+}
+
+.config-editor-drag-handle {
+    -fx-text-fill: #6f7883;
+    -fx-font-size: 13px;
+    -fx-cursor: move;
+}
+
+.config-editor-drag-handle:hover {
+    -fx-text-fill: #98a3ad;
+}
+
+.config-editor-row-dragging {
+    -fx-opacity: 0.4;
+}
+
+.config-editor-row-drag-over {
+    -fx-border-color: #4aa3df transparent transparent transparent;
+    -fx-border-width: 2px 0 0 0;
+}
+
+.config-editor-cell-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #e6eaee;
+    -fx-padding: 8px 14px 8px 14px;
+
+}
+
+.config-editor-cell-label:hover {
+    -fx-background-color: #2a3a4b;
+    -fx-background-radius: 4px;
+    -fx-cursor: hand;
+}
+
+.config-editor-field {
+    -fx-background-color: #23272d;
+    -fx-background-insets: 0;
+    -fx-border-color: #454c56;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 5px 8px 5px 8px;
+    -fx-font-size: 13px;
+    -fx-alignment: center;
+    -fx-text-fill: -fx-text-inner-color;
+}
+
+.config-editor-field:focused {
+    -fx-border-color: #4aa3df;
+    -fx-effect: dropshadow(three-pass-box, rgba(74,163,223,0.35), 4, 0, 0, 0);
+}
+
+.config-editor-combo {
+    -fx-background-color: #23272d;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4px;
+    -fx-border-color: #454c56;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-font-size: 13px;
+    -fx-alignment: center;
+}
+
+.config-editor-combo:hover {
+    -fx-border-color: #5b6470;
+}
+
+.config-editor-checkbox > .box {
+    -fx-background-color: #23272d;
+    -fx-border-color: #454c56;
+    -fx-border-width: 1px;
+    -fx-border-radius: 3px;
+    -fx-background-radius: 3px;
+    -fx-padding: 3px;
+}
+
+.config-editor-checkbox:selected > .box {
+    -fx-background-color: #3498db;
+    -fx-border-color: #2980b9;
+}
+
+.config-editor-checkbox:selected > .box > .mark {
+    -fx-background-color: #ffffff;
+}
+
+/* =========================================================================
+   SIMULATION WORKBENCH LAYOUT (left/right sidebars + center tab pane)
+   ========================================================================= */
+.simulation-container {
+    -fx-background-color: #1a1d21;
+}
+
+.back-button {
+    -fx-min-width: 32px;
+    -fx-pref-width: 32px;
+    -fx-max-width: 32px;
+    -fx-min-height: 32px;
+    -fx-pref-height: 32px;
+    -fx-max-height: 32px;
+    -fx-padding: 0;
+    -fx-background-radius: 16px;
+    -fx-border-radius: 16px;
+}
+
+.back-button-icon {
+    -fx-stroke: #e6eaee;
+    -fx-stroke-width: 2px;
+    -fx-fill: transparent;
+}
+
+.sidebar-panel {
+    -fx-padding: 15px;
+    -fx-pref-width: 240px;
+    -fx-background-color: #23272d;
+    -fx-border-color: #3a4048;
+    -fx-border-width: 0 1px 0 1px;
+}
+
+.sidebar-info-label {
+    -fx-font-size: 14px;
+    -fx-text-fill: #98a3ad;
+}
+
+.sidebar-value-label {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 17px;
+    -fx-text-fill: #e6eaee;
+}
+
+.instruction-list {
+    -fx-background-color: #23272d;
+    -fx-background-insets: 0;
+    -fx-border-color: #3a4048;
+    -fx-border-width: 1px;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 4px;
+}
+
+.instruction-list-header {
+    -fx-border-color: transparent transparent #3a4048 transparent;
+    -fx-border-width: 1px;
+    -fx-padding: 2px 8px 6px 0;
+}
+
+.instruction-list-header .data-table-cell {
+    -fx-font-weight: bold;
+    -fx-text-fill: #98a3ad;
+    -fx-font-size: 12px;
+}
+
+.instruction-list-scroll {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+}
+
+.instruction-list-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.instruction-list-rows {
+    -fx-padding: 0 8px 0 0;
+}
+
+.instruction-list-row {
+    -fx-padding: 6px 0;
+    -fx-background-color: transparent;
+    -fx-background-radius: 6px;
+}
+
+.instruction-list-row:hover {
+    -fx-background-color: #2d333a;
+    -fx-cursor: hand;
+}
+
+.instruction-list-row:current {
+    -fx-background-color: #1e3a52;
+    -fx-background-radius: 6px;
+    -fx-border-color: #4aa3df;
+    -fx-border-width: 0 0 0 3px;
+    -fx-font-weight: bold;
+}
+
+.execution-log {
+    -fx-background-color: #23272d;
+    -fx-background-insets: 0;
+    -fx-border-color: #3a4048;
+    -fx-border-width: 1px;
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 4px;
+}
+
+.execution-log .list-cell {
+    -fx-font-size: 13px;
+    -fx-text-fill: #e6eaee;
+    -fx-padding: 6px 8px;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #2a2f36 transparent;
+    -fx-border-width: 1px;
+}
+
+.execution-log .list-cell:filled:hover {
+    -fx-background-color: #2d333a;
+    -fx-cursor: hand;
+}
+
+.tab-placeholder-label {
+    -fx-font-size: 13px;
+    -fx-text-fill: #cfd6dd;
+    -fx-padding: 20px;
+    -fx-max-width: 500px;
+}
+
+.tab-label {
+    -fx-graphic-text-gap: 0;
+}
+
+.tab-notification-badge {
+    -fx-fill: #4aa3df;
+}
+
+.step-counter-label {
+    -fx-font-weight: bold;
+    -fx-font-size: 15px;
+}
+
+/* =========================================================================
+   SCHEMATIC TABS (MMU / TLB / OS / Memory -- everything that extends SchematicTab, and the
+   pieces they share: field boxes, data tables, wires and their labels, headings)
+   ========================================================================= */
+.schematic-tab {
+    -fx-background-color: #23272d;
+}
+
+.field-box-cell {
+    -fx-background-color: #1a1d21;
+    -fx-border-color: #a9b3be;
+    -fx-border-width: 2px;
+}
+
+.field-box-cell-left {
+    -fx-border-width: 2px 0 2px 2px;
+    -fx-background-radius: 2px 0 0 2px;
+    -fx-border-radius: 2px 0 0 2px;
+}
+
+.field-box-cell-right {
+    -fx-background-radius: 0 2px 2px 0;
+    -fx-border-radius: 0 2px 2px 0;
+}
+
+.field-box-cell-solo {
+    -fx-background-radius: 2px;
+    -fx-border-radius: 2px;
+}
+
+.field-box-title {
+    -fx-font-size: 13px;
+    -fx-text-fill: #98a3ad;
+}
+
+.field-box-value {
+    -fx-text-fill: #e6eaee;
+}
+
+.data-table {
+    -fx-padding: 10px;
+    -fx-background-color: #23272d;
+    -fx-border-color: #a9b3be;
+    -fx-border-width: 1px;
+    -fx-border-radius: 2px;
+    -fx-background-radius: 2px;
+}
+
+.data-table.data-table-schematic {
+    -fx-padding: 0;
+}
+
+.data-table-schematic > .data-table-header {
+    -fx-padding: 0 10px 0 10px;
+    -fx-background-radius: 2px 2px 0 0;
+}
+
+.data-table-schematic > .data-table-rows {
+    -fx-padding: 0 10px 10px 10px;
+}
+
+.data-table.data-table-flush {
+    -fx-padding: 0;
+}
+
+.data-table-flush > .data-table-header {
+    -fx-padding: 0 10px 0 10px;
+    -fx-background-radius: 2px 2px 0 0;
+}
+
+.data-table-flush > .data-table-rows {
+    -fx-padding: 0 10px 10px 10px;
+}
+
+.data-table-clickable:hover {
+    -fx-border-color: #4aa3df;
+}
+
+.tlb-body-clickable:hover .tlb-table {
+    -fx-border-color: #4aa3df;
+}
+
+.inspector-root {
+    -fx-background-color: #1a1d21;
+}
+
+.data-table-header {
+    -fx-background-color: #1a1d21;
+    -fx-border-color: transparent transparent #a9b3be transparent;
+    -fx-border-width: 1px;
+}
+
+.data-table-header .data-table-cell {
+    -fx-font-weight: bold;
+    -fx-text-fill: #e6eaee;
+}
+
+.data-table-row {
+    -fx-padding: 4px 0 4px 0;
+    -fx-border-color: transparent transparent #3a4048 transparent;
+    -fx-border-width: 1px;
+}
+
+.data-table-row-current {
+    -fx-background-color: #1e3a52;
+    -fx-border-color: #4aa3df;
+    -fx-border-width: 1px;
+    -fx-background-radius: 2px;
+    -fx-border-radius: 2px;
+}
+
+.data-table-row-before-current {
+    -fx-border-color: transparent;
+}
+
+.data-table-row-locked .data-table-cell {
+    -fx-text-fill: #7b858f;
+}
+
+.data-table-tooltip {
+    -fx-font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    -fx-font-size: 13px;
+    -fx-text-fill: #e6eaee;
+    -fx-background-color: #3a4048;
+    -fx-background-radius: 2px;
+    -fx-padding: 4px 8px 4px 8px;
+}
+
+.data-table-cell {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #e6eaee;
+}
+
+.data-table-cell-clickable:hover {
+    -fx-text-fill: #4aa3df;
+    -fx-underline: true;
+}
+
+.data-table-cell-bit-set {
+    -fx-text-fill: #3ecf83;
+}
+.data-table-cell-bit-clear {
+    -fx-text-fill: #f0655a;
+}
+
+.data-table-schematic .data-table-cell {
+    -fx-font-size: 19px;
+}
+
+.data-table-schematic > .data-table-rows > .data-table-row,
+.data-table-schematic > .tlb-table-rows > .data-table-row {
+    -fx-padding: 7px 0 7px 0;
+}
+
+.connector-line {
+    -fx-stroke: #7d8590;
+    -fx-stroke-width: 1.5px;
+    -fx-fill: transparent;
+}
+
+.connector-line:active {
+    -fx-stroke: #4aa3df;
+    -fx-stroke-width: 2.0px;
+}
+
+.tlb-table {
+    -fx-padding: 0;
+    -fx-background-color: #23272d;
+    -fx-border-color: #a9b3be;
+    -fx-border-width: 1px;
+    -fx-border-radius: 2px;
+    -fx-background-radius: 2px;
+}
+
+.tlb-table > .data-table-header {
+    -fx-padding: 0 10px 0 10px;
+    -fx-background-radius: 2px 2px 0 0;
+}
+
+.tlb-table > .tlb-table-rows {
+    -fx-padding: 0 10px 10px 10px;
+}
+
+.tlb-row-hit {
+    -fx-background-color: #1d3a2b;
+    -fx-border-color: #34b26b;
+    -fx-border-width: 1px;
+    -fx-background-radius: 2px;
+    -fx-border-radius: 2px;
+}
+
+.tlb-row-insert {
+    -fx-background-color: #1e3a52;
+    -fx-border-color: #4aa3df;
+    -fx-border-width: 1px;
+    -fx-background-radius: 2px;
+    -fx-border-radius: 2px;
+}
+
+.tlb-row-miss {
+    -fx-background-color: #3d2326;
+    -fx-border-color: #f0655a;
+    -fx-border-width: 1px;
+    -fx-background-radius: 2px;
+    -fx-border-radius: 2px;
+}
+
+.tlb-tag-hit { -fx-text-fill: #3ecf83; }
+.tlb-tag-miss { -fx-text-fill: #f0655a; }
+
+.schematic-heading {
+    -fx-font-size: 17px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #e6eaee;
+}
+
+.tlb-way-caption {
+    -fx-font-size: 11px;
+    -fx-font-weight: normal;
+    -fx-text-fill: #7b858f;
+}
+
+.bit-width-label {
+    -fx-font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    -fx-font-size: 12px;
+    -fx-text-fill: #98a3ad;
+}
+
+.bit-width-label.mmu-descriptor-size-label {
+    -fx-font-size: 18px;
+}
+
+.wire-value-label {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 17px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #98a3ad;
+}
+
+.wire-value-label:active {
+    -fx-text-fill: #4aa3df;
+}
+
+.mmu-adder-circle {
+    -fx-fill: #1a1d21;
+    -fx-stroke: #7d8590;
+    -fx-stroke-width: 2px;
+}
+
+.mmu-adder-circle:active {
+    -fx-stroke: #4aa3df;
+}
+
+.mmu-adder-label {
+    -fx-stroke: #e6eaee;
+    -fx-stroke-width: 2px;
+    -fx-stroke-line-cap: round;
+}
+
+/* =========================================================================
+   PAGED OS TAB (frame table + occupancy strip + disk box + replacement queue)
+   ========================================================================= */
+
+.frame-table-view {
+    -fx-padding: 8px;
+    -fx-background-color: #23272d;
+    -fx-border-color: #a9b3be;
+    -fx-border-width: 1px;
+    -fx-border-radius: 2px;
+    -fx-background-radius: 2px;
+}
+
+.data-table-header-muted {
+    -fx-background-color: #1a1d21;
+    -fx-border-color: transparent transparent #a9b3be transparent;
+    -fx-border-width: 1px;
+}
+
+.data-table-header-muted .data-table-cell {
+    -fx-font-weight: bold;
+    -fx-text-fill: #98a3ad;
+}
+
+.data-table-seek-bar {
+    -fx-padding: 0 0 6px 0;
+}
+
+.data-table-seek-field {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-pref-height: 22px;
+}
+
+.data-table-seek-error {
+    -fx-border-color: #f0655a;
+    -fx-border-width: 1.5px;
+}
+
+.frame-table-row {
+    -fx-border-color: transparent transparent #2a2f36 transparent;
+    -fx-border-width: 1px;
+}
+
+.frame-table-row.frame-table-row-active {
+    -fx-background-color: #24445f;
+}
+
+.frame-table-row.frame-table-row-victim {
+    -fx-background-color: #43391f;
+}
+
+.frame-table-row.frame-table-row-evicting {
+    -fx-background-color: #472a2c;
+}
+
+.frame-table-row-found {
+    -fx-background-color: transparent;
+    -fx-border-color: #4aa3df;
+    -fx-border-width: 2px;
+}
+
+.frame-swatch {
+    -fx-border-color: #23272d;
+    -fx-border-width: 0 1px 0 0;
+    -fx-text-fill: #ffd98a;
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+}
+
+.frame-swatch-free      { -fx-background-color: #38404a; }
+.frame-swatch-allocated { -fx-background-color: #4aa3df; }
+.frame-swatch-kernel    { -fx-background-color: #7d8894; }
+.frame-swatch-victim    { -fx-background-color: #5d4a22; }
+.frame-swatch-evicting  { -fx-background-color: #7c3f3b; }
+
+.os-disk-box {
+    -fx-padding: 10px 14px 10px 14px;
+    -fx-background-color: #1a1d21;
+    -fx-border-color: #a9b3be;
+    -fx-border-width: 2px;
+    -fx-border-radius: 2px;
+    -fx-background-radius: 2px;
+}
+
+.os-disk-box:active {
+    -fx-border-color: #4aa3df;
+}
+
+.os-disk-box:active:hover {
+    -fx-border-color: #7cc0ee;
+}
+
+.status-caption {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-text-fill: #98a3ad;
+}
+
+.side-effect-note-card {
+    -fx-background-color: #1e3a52;
+    -fx-border-color: #4aa3df;
+    -fx-border-width: 2px;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-padding: 10px;
+}
+
+.side-effect-note-headline {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #7cc0ee;
+}
+
+.side-effect-note-user {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 13px;
+    -fx-text-fill: #98a3ad;
+}
+
+.side-effect-note-dismiss {
+    -fx-background-color: transparent;
+    -fx-text-fill: #98a3ad;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-padding: 0 4px 0 4px;
+    -fx-cursor: hand;
+}
+
+.side-effect-note-dismiss:hover {
+    -fx-text-fill: #4aa3df;
+}
+
+.os-wire-label {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #98a3ad;
+}
+
+.os-wire-label:active {
+    -fx-text-fill: #4aa3df;
+}
+
+.replacement-queue {
+    -fx-padding: 6px 0 6px 0;
+}
+
+.replacement-queue:hover .replacement-queue-slot {
+    -fx-border-color: #7cc0ee;
+}
+
+.replacement-queue-slot {
+    -fx-padding: 4px 12px 4px 12px;
+    -fx-background-color: #1a1d21;
+    -fx-border-color: #a9b3be;
+    -fx-border-width: 2px;
+    -fx-background-radius: 2px;
+    -fx-border-radius: 2px;
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 17px;
+    -fx-text-fill: #e6eaee;
+    -fx-alignment: center;
+}
+
+.replacement-queue-slot-head {
+    -fx-background-color: #5d4a22;
+    -fx-border-color: #e0a63b;
+    -fx-font-weight: bold;
+}
+
+.replacement-queue-ellipsis {
+    -fx-text-fill: #7b858f;
+    -fx-font-weight: bold;
+}
+
+.replacement-queue-caption {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #98a3ad;
+}
+
+.replacement-queue-row-head {
+    -fx-background-color: #5d4a22;
+}
+
+.os-user-summary {
+    -fx-spacing: 6px;
+    -fx-padding: 10px 12px 10px 12px;
+    -fx-background-color: #23272d;
+    -fx-border-color: #a9b3be;
+    -fx-border-width: 1px;
+    -fx-border-radius: 2px;
+    -fx-background-radius: 2px;
+}
+
+.os-user-summary-row {
+    -fx-spacing: 12px;
+}
+
+.os-user-summary-cell {
+    -fx-font-family: "IBM Plex Mono", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-text-fill: #e6eaee;
+}

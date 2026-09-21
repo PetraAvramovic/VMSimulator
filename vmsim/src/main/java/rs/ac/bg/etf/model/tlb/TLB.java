@@ -299,6 +299,38 @@ public abstract class TLB
         return -1;
     }
 
+    /**
+     * The set a full lookup key maps to, or -1 when the TLB is not divided into sets.
+     * @param fullKey The full lookup key
+     * @return The set number, or -1
+     */
+    public int setIndexOf(long fullKey)
+    {
+        return -1;
+    }
+
+    /**
+     * The number the UI shows for the entry stored at flat index {@code slot} of {@link #getEntries()}:
+     * its row ("Index") in a direct-mapped or fully-associative TLB, and its way ("Entry k" table) in a
+     * set-associative one, where {@link #setNumber} then says which set it is in.
+     * @param slot The flat index into {@link #getEntries()}
+     * @return The entry number
+     */
+    public int entryNumber(int slot)
+    {
+        return slot;
+    }
+
+    /**
+     * The set the entry at flat index {@code slot} belongs to, or -1 when the TLB is not divided into sets.
+     * @param slot The flat index into {@link #getEntries()}
+     * @return The set number, or -1
+     */
+    public int setNumber(int slot)
+    {
+        return -1;
+    }
+
     public List<TLBEntry> getEntries()
     {
         return Collections.unmodifiableList(entries);

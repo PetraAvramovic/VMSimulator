@@ -1,19 +1,19 @@
 package rs.ac.bg.etf.view;
 
-import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.css.PseudoClass;
 import javafx.geometry.Bounds;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
 
 import rs.ac.bg.etf.view.inspector.MemoryInspectorWindow;
 import rs.ac.bg.etf.view.memory.MemoryTableView;
 import rs.ac.bg.etf.view.shape.BitWidthLine;
 import rs.ac.bg.etf.view.util.FieldBoxes;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.SchematicTab;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.viewmodel.MemoryTabViewModel;
 
@@ -23,35 +23,29 @@ import rs.ac.bg.etf.viewmodel.MemoryTabViewModel;
  * page-table schematic. Clicking the table opens a separate, independently-scrollable/seekable
  * full-memory browser window, seeded on whichever address the schematic is currently centred on.
  */
-public class MemoryTabView extends StackPane
+public class MemoryTabView extends SchematicTab
 {
-    private static final double CANVAS_HEIGHT = 700;
-    private static final double MARGIN = 30;
+    private final double MARGIN = UiScale.px(30);
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
-
-    private final Pane canvas = new Pane();
 
     public MemoryTabView(MemoryTabViewModel viewModel)
     {
-        getStyleClass().add("mmu-tab-container");
-        canvas.setPrefHeight(CANVAS_HEIGHT);
-
         // Matches the MMU tab's own boxY exactly: the header needs a 58px clearance above the box
         // (see paTitle below), and 50 was too small for that -- boxY - 58 went negative, shoving
         // the header up past the canvas's own top edge instead of sitting under the tab bar with a
         // sane margin the way every other tab's header does.
-        double boxY = 78;
+        double boxY = UiScale.px(78);
         double boxX = MARGIN;
-        double tableY = boxY + FieldBoxes.ADDRESS_BOX_HEIGHT + 90;
+        double tableY = boxY + FieldBoxes.addressBoxHeight() + UiScale.px(90);
 
         // Same wide/short proportions and padding as the MMU/TLB tabs' own Block|Word address
         // boxes (ADDRESS_BOX_HEIGHT/ADDRESS_FIELD_PADDING) -- not the taller, narrower "solo
         // field" proportions (the plain 3-arg valueCell() overload, BOX_HEIGHT/FIELD_PADDING)
         // meant for things like the Page Table Pointer box.
         Region paBox = FieldBoxes.valueCell(
-                "va-breakdown-cell-solo", viewModel.physicalAddressHexProperty(),
+                "field-box-cell-solo", viewModel.physicalAddressHexProperty(),
                 ValueConverter.hexDigitsFor(viewModel.getPhysicalAddressBits()),
-                FieldBoxes.ADDRESS_BOX_HEIGHT, FieldBoxes.ADDRESS_FIELD_PADDING);
+                FieldBoxes.addressBoxHeight(), FieldBoxes.addressFieldPadding());
         double paBoxWidth = paBox.getPrefWidth();
         paBox.setLayoutX(boxX);
         paBox.setLayoutY(boxY);
@@ -60,30 +54,44 @@ public class MemoryTabView extends StackPane
         // to the box, that the MMU tab uses above its own Block|Word pair -- this tab just has one
         // undivided box instead of two, so there's no second, smaller "Block"/"Word" caption
         // underneath the header filling part of that gap.
-        Label paTitle = FieldBoxes.sectionLabel("Physical Address", boxX, boxY - 58);
+        Label paTitle = FieldBoxes.sectionLabel("Physical Address", boxX, boxY - UiScale.px(58));
 
         BitWidthLine addressWire = new BitWidthLine();
         addressWire.bitsProperty().set(viewModel.getPhysicalAddressBits());
         addressWire.labelOnLeftProperty().set(false);
         addressWire.arrowTipVisibleProperty().set(false);
         addressWire.startXProperty().set(boxX + paBoxWidth / 2);
-        addressWire.startYProperty().set(boxY + FieldBoxes.ADDRESS_BOX_HEIGHT);
+        addressWire.startYProperty().set(boxY + FieldBoxes.addressBoxHeight());
         addressWire.endXProperty().bind(addressWire.startXProperty());
         // endY is only a sane pre-layout placeholder -- updateConnector() below moves it down to
         // whichever row is actually addressed, so this wire always spans the whole run from the
         // box down to the row (not just partway), and the "Nb" tag -- always at a BitWidthLine's
         // own midpoint -- reads as centred on that whole run rather than pinned near the box.
-        addressWire.endYProperty().set(tableY - 20);
+        addressWire.endYProperty().set(tableY - UiScale.px(20));
 
         // Only the table itself is centred horizontally in the (viewport-width-tracking) canvas --
         // the PA box and both titles stay left-anchored like every other tab's fields.
         MemoryTableView memoryTableView = new MemoryTableView(viewModel);
         memoryTableView.setLayoutY(tableY);
         memoryTableView.layoutXProperty().bind(canvas.widthProperty().subtract(memoryTableView.widthProperty()).divide(2));
-        memoryTableView.getStyleClass().add("page-table-clickable");
+        memoryTableView.getStyleClass().add("data-table-clickable");
         memoryTableView.setCursor(Cursor.HAND);
 
-        Label tableTitle = FieldBoxes.sectionLabel("Memory", 0, tableY - 24);
+        // Design size from what's actually drawn -- never the canvas's own size: wide enough for
+        // the (centred) table and the PA box each with their margins, tall enough for the table's
+        // bottom edge plus a margin -- so a config with wider addresses widens the design size
+        // (and the workbench scales to it) instead of the table running under the PA box. The
+        // table's preferred size (known at construction) backs up its live size, so the minimum is
+        // already right before this tab has ever been laid out.
+        canvas.designWidthProperty().bind(Bindings.createDoubleBinding(
+                () -> Math.max(2 * MARGIN + paBoxWidth,
+                        2 * MARGIN + Math.max(memoryTableView.prefWidth(-1), memoryTableView.getWidth())),
+                memoryTableView.widthProperty()));
+        canvas.designHeightProperty().bind(Bindings.createDoubleBinding(
+                () -> tableY + Math.max(memoryTableView.prefHeight(-1), memoryTableView.getHeight()) + MARGIN,
+                memoryTableView.heightProperty()));
+
+        Label tableTitle = FieldBoxes.sectionLabel("Memory", 0, tableY - UiScale.px(24));
         tableTitle.layoutXProperty().bind(memoryTableView.layoutXProperty());
 
         MemoryInspectorWindow inspector = new MemoryInspectorWindow(viewModel.getContext(), viewModel.currentStepNumberProperty());
@@ -97,12 +105,13 @@ public class MemoryTabView extends StackPane
 
         canvas.getChildren().addAll(paTitle, paBox, addressWire, tableTitle, memoryTableView, addressAcross);
 
-        Runnable updateConnector = () -> updateConnector(memoryTableView, addressWire, addressAcross);
-        memoryTableView.currentEntryAnchorProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateConnector));
-        memoryTableView.layoutXProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateConnector));
-        canvas.widthProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateConnector));
-        canvas.heightProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateConnector));
-        Platform.runLater(updateConnector);
+        // Once per pulse, right after layout (see PostLayoutTask), so the wire is drawn with the boxes.
+        PostLayoutTask reroute = new PostLayoutTask(this, () -> updateConnector(memoryTableView, addressWire, addressAcross));
+        memoryTableView.currentEntryAnchorProperty().addListener((obs, oldVal, newVal) -> reroute.request());
+        memoryTableView.layoutXProperty().addListener((obs, oldVal, newVal) -> reroute.request());
+        canvas.widthProperty().addListener((obs, oldVal, newVal) -> reroute.request());
+        canvas.heightProperty().addListener((obs, oldVal, newVal) -> reroute.request());
+        reroute.request();
 
         bindActive(addressWire, viewModel.memoryAddressedProperty());
         bindActive(addressAcross, viewModel.memoryAddressedProperty());
@@ -111,13 +120,9 @@ public class MemoryTabView extends StackPane
                 memoryTableView.getScene() != null ? memoryTableView.getScene().getWindow() : null,
                 viewModel.getWindowCenterAddress()));
 
-        ScrollPane scrollPane = new ScrollPane(canvas);
-        scrollPane.getStyleClass().addAll("mmu-scroll-pane", "slim-scroll");
         // The canvas's width tracks the actual viewport (not a fixed constant), so "centred in the
         // canvas" (the table's layoutX binding above) really means "centred in the visible tab".
-        scrollPane.setFitToWidth(true);
-
-        getChildren().add(scrollPane);
+        mountCanvas();
     }
 
     private void updateConnector(MemoryTableView memoryTableView, BitWidthLine addressWire, BitWidthLine addressAcross)
@@ -141,8 +146,7 @@ public class MemoryTabView extends StackPane
         addressAcross.endXProperty().set(tableLeftX);
         addressAcross.endYProperty().set(targetY);
 
-        addressWire.toFront();
-        addressAcross.toFront();
+        canvas.bringToFront(addressWire, addressAcross);
     }
 
     private void bindActive(javafx.scene.Node node, javafx.beans.property.BooleanProperty active)

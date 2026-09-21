@@ -1,6 +1,10 @@
 package rs.ac.bg.etf.view;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
@@ -30,7 +34,6 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
@@ -38,7 +41,9 @@ import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
 import rs.ac.bg.etf.view.tlb.PagedTLBTabView;
 import rs.ac.bg.etf.view.util.BackButton;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
 import rs.ac.bg.etf.view.util.StepDescriptionFormatter;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.MemoryTabViewModel;
@@ -52,15 +57,15 @@ import rs.ac.bg.etf.viewmodel.SimulationViewModel;
  */
 public class SimulationView {
     // Logical drag limits so a sidebar can never swallow the whole workbench or collapse to nothing
-    private static final double SIDEBAR_MIN_WIDTH = 200;
-    private static final double SIDEBAR_MAX_WIDTH = 420;
+    private final double SIDEBAR_MIN_WIDTH = UiScale.px(200);
+    private final double SIDEBAR_MAX_WIDTH = UiScale.px(420);
     // Circle's own CSS radius property isn't reliable for sizing (PagedMMUTabView's adder circle
     // sets its radius the same way, in code, and only styles fill/stroke via CSS -- see
     // .mmu-adder-circle), so the tab notification dot's size lives here instead of in CSS.
-    private static final double TAB_NOTIFICATION_BADGE_RADIUS = 4;
+    private final double TAB_NOTIFICATION_BADGE_RADIUS = UiScale.px(4);
     // Breathing room between the dot and the tab text that follows it, reserved only while the
     // badge is actually showing.
-    private static final double TAB_NOTIFICATION_BADGE_GAP = 6;
+    private final double TAB_NOTIFICATION_BADGE_GAP = UiScale.px(6);
     // The instruction list's Index column has no configured upper bound (an instruction file can be
     // any length), so its width is reserved for this many digits rather than measured from the
     // actual (possibly much shorter) instruction list -- otherwise a short test file sizes the
@@ -68,24 +73,82 @@ public class SimulationView {
     private static final int MAX_INDEX_DIGITS = 4;
     // Extra breathing room below the step description, on top of the right sidebar's own uniform
     // child spacing -- see buildRightSidebar.
-    private static final double STEP_DESC_GAP = 16;
+    private final double STEP_DESC_GAP = UiScale.px(16);
     // Fixed reserve for the step description -- enough for 3 wrapped lines at its own font size, so
     // the nav rows below it sit at one constant position regardless of how long the current step's
     // description is or how many lines it wraps to. A description that somehow needs more than
     // that (an extreme case: the sidebar dragged to its narrowest plus an unusually long message)
     // is clipped rather than pushing the buttons around -- see buildRightSidebar.
-    private static final double STEP_DESC_HEIGHT = 60;
+    private final double STEP_DESC_HEIGHT = UiScale.px(60);
+    // Heights of the two sidebar lists. Fixed on purpose: the workbench adapts to the window by
+    // rebuilding at another UI scale (see UiScale), so these stay at their 1080p design proportions
+    // rather than stretching with the window -- which would also push the step description and nav
+    // rows off the constant position the sidebar is designed around.
+    private final double INSTRUCTION_LIST_PREF_HEIGHT = UiScale.px(196);
+    private final double EXECUTION_LOG_PREF_HEIGHT = UiScale.px(220);
+    // Where the SplitPane's two dividers sit, as fractions of the workbench's logical width, i.e.
+    // how wide each sidebar is at the 1080p design size (18% each side).
+    private static final double LEFT_DIVIDER_POSITION = 0.18;
+    private static final double RIGHT_DIVIDER_POSITION = 0.82;
+    // Style class of the tab strip TabPane's skin creates; found to size the workbench's minimum
+    // height (see buildTabPane).
+    private static final String TAB_HEADER_AREA_STYLE_CLASS = "tab-header-area";
 
     private final SplitPane layoutContainer;
+
+    // Everything this view registered on the (longer-lived) view models, undone by dispose().
+    // The workbench is rebuilt whenever the UI scale changes, so an old view must not stay wired to
+    // the view models -- it would keep updating (and keep everything it references alive) forever.
+    private final List<Runnable> teardown = new ArrayList<>();
+
+    // Tabs whose content hasn't been built yet (see lazyTab).
+    private final Map<Tab, Supplier<Node>> pendingTabContent = new HashMap<>();
 
     public SimulationView(SimulationViewModel viewModel) {
         VBox leftSidebar = buildLeftSidebar(viewModel);
         TabPane tabPane = buildTabPane(viewModel);
         VBox rightSidebar = buildRightSidebar(viewModel);
 
-        this.layoutContainer = new SplitPane(leftSidebar, tabPane, rightSidebar);
+        // The workbench's minimum size is what App's ResponsiveHost sizes the UI scale against, so it
+        // has to be the sum of what its parts really need. SplitPane's own skin is
+        // trusted for the divider chrome but not relied on for the parts: the widest sidebar/tab
+        // minimums are added up here explicitly and the larger of the two wins.
+        this.layoutContainer = new SplitPane(leftSidebar, tabPane, rightSidebar) {
+            @Override
+            protected double computeMinWidth(double height) {
+                double parts = leftSidebar.minWidth(-1) + tabPane.minWidth(-1) + rightSidebar.minWidth(-1);
+                return Math.max(super.computeMinWidth(height), parts + snappedLeftInset() + snappedRightInset());
+            }
+
+            @Override
+            protected double computeMinHeight(double width) {
+                double tallest = Math.max(tabPane.minHeight(-1),
+                        Math.max(leftSidebar.minHeight(-1), rightSidebar.minHeight(-1)));
+                return Math.max(super.computeMinHeight(width), tallest + snappedTopInset() + snappedBottomInset());
+            }
+        };
         this.layoutContainer.getStyleClass().add("simulation-container");
-        this.layoutContainer.setDividerPositions(0.18, 0.82);
+
+        // A SplitPane remembers its divider positions as state and silently nudges them whenever a
+        // minimum size clamps them -- and the workbench's logical width shifts a few times while the
+        // screen first lays out (the scale settles as each tab reports its real minimum), so left
+        // alone the sidebars end up wherever those transient sizes pushed them: wider than designed
+        // and unequal. Re-applying the design fractions whenever the logical width changes makes the
+        // sidebar widths a pure function of the window instead of its layout history. (A divider
+        // the user dragged snaps back on the next window resize -- the price of that determinism.)
+        Runnable placeDividers = () ->
+                layoutContainer.setDividerPositions(LEFT_DIVIDER_POSITION, RIGHT_DIVIDER_POSITION);
+        placeDividers.run();
+        layoutContainer.widthProperty().addListener((observable, oldWidth, newWidth) -> placeDividers.run());
+    }
+
+    /**
+     * Detaches this view from the view models (log, current instruction, notification badges and
+     * every tab's own view model), so it can be dropped -- e.g. when the screen is rebuilt for a new UI scale.
+     */
+    public void dispose() {
+        teardown.forEach(Runnable::run);
+        teardown.clear();
     }
 
     private Button buildBackButton(SimulationViewModel viewModel) {
@@ -144,7 +207,7 @@ public class SimulationView {
         // on computeMinWidth let the SplitPane squeeze it well below the header's real width,
         // squishing the column labels together. computePrefWidth reflects the header's actual
         // fixed-width columns regardless of how many rows are loaded.
-        VBox leftSidebar = new VBox(12) {
+        VBox leftSidebar = new VBox(UiScale.px(12)) {
             @Override
             protected double computeMinWidth(double height) {
                 return Math.max(SIDEBAR_MIN_WIDTH, super.computePrefWidth(height));
@@ -160,18 +223,18 @@ public class SimulationView {
         Button backButton = buildBackButton(viewModel);
 
         Label header = new Label("Instructions");
-        header.getStyleClass().add("column-header");
+        header.getStyleClass().add("section-title");
 
         Region instructionList = buildInstructionList(viewModel);
 
         Label currentVaHeader = new Label("Virtual Address");
-        currentVaHeader.getStyleClass().add("column-header");
+        currentVaHeader.getStyleClass().add("section-title");
         Label currentVaLabel = new Label();
         currentVaLabel.getStyleClass().add("sidebar-value-label");
         currentVaLabel.textProperty().bind(viewModel.currentVirtualAddressHexProperty());
 
         Label currentPaHeader = new Label("Physical Address");
-        currentPaHeader.getStyleClass().add("column-header");
+        currentPaHeader.getStyleClass().add("section-title");
         Label currentPaLabel = new Label();
         currentPaLabel.getStyleClass().add("sidebar-value-label");
         currentPaLabel.textProperty().bind(viewModel.currentPhysicalAddressHexProperty());
@@ -229,7 +292,7 @@ public class SimulationView {
 
         ScrollPane scrollPane = new ScrollPane(rows);
         scrollPane.getStyleClass().addAll("instruction-list-scroll", "slim-scroll");
-        scrollPane.setPrefHeight(196);
+        scrollPane.setPrefHeight(INSTRUCTION_LIST_PREF_HEIGHT);
         scrollPane.setFocusTraversable(false);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scrollPane.setFitToWidth(false);
@@ -274,7 +337,7 @@ public class SimulationView {
         // (which only guarantees visibility), ScrollPane's vvalue is already a direct 0..1
         // fraction of the scrollable range, computed from each row's real laid-out position --
         // no "park at the bottom, then scroll back up" workaround needed.
-        currentInstructionIndex.addListener((obs, oldIndex, newIndex) -> {
+        ChangeListener<Number> onCurrentInstructionChanged = (obs, oldIndex, newIndex) -> {
             int index = newIndex.intValue();
             for (int i = 0; i < rowCount; i++)
                 rows.getChildren().get(i).pseudoClassStateChanged(current, i == index);
@@ -287,14 +350,22 @@ public class SimulationView {
                 return;
             double targetY = rows.getChildren().get(index).getBoundsInParent().getMinY();
             scrollPane.setVvalue(Math.min(1.0, Math.max(0.0, targetY / maxScroll)));
-        });
+        };
+        currentInstructionIndex.addListener(onCurrentInstructionChanged);
+        teardown.add(() -> currentInstructionIndex.removeListener(onCurrentInstructionChanged));
+        // A view rebuilt mid-simulation (see UiScale) starts with an instruction already running:
+        // apply its highlight (and scroll it into view, once the rows have been laid out) right away.
+        new PostLayoutTask(card, () -> {
+            Number index = currentInstructionIndex.getValue();
+            onCurrentInstructionChanged.changed(currentInstructionIndex, index, index);
+        }, false).request();
 
         return card;
     }
 
     private Label instructionCell(String text, double width) {
         Label label = new Label(text);
-        label.getStyleClass().add("page-table-cell");
+        label.getStyleClass().add("data-table-cell");
         label.setPrefWidth(width);
         label.setAlignment(Pos.CENTER);
         return label;
@@ -328,13 +399,56 @@ public class SimulationView {
     // CENTER: MMU / TLB / OS tabs (placeholder content for now)
     // -------------------------------------------------------------------------
     private TabPane buildTabPane(SimulationViewModel viewModel) {
-        TabPane tabPane = new TabPane();
+        // TabPane's skin doesn't report its tab contents' minimum sizes upward (a schematic tab's
+        // ScrollPane hides its canvas's size from it anyway), so the strip's own height and the
+        // largest tab minimum are added up here -- that is what keeps the workbench from ever being
+        // laid out smaller than its widest/tallest schematic can draw in.
+        TabPane tabPane = new TabPane() {
+            @Override
+            protected double computeMinWidth(double height) {
+                return Math.max(super.computeMinWidth(height),
+                        largestTabMinimum(true) + snappedLeftInset() + snappedRightInset());
+            }
+
+            @Override
+            protected double computeMinHeight(double width) {
+                double headerHeight = tabHeaderArea() instanceof Region strip ? strip.prefHeight(-1) : 0;
+                return Math.max(super.computeMinHeight(width),
+                        largestTabMinimum(false) + headerHeight + snappedTopInset() + snappedBottomInset());
+            }
+
+            // The skin adds the tab strip as a direct child, so scanning the children finds it. Not
+            // lookup(): that walks the whole subtree -- and the skin stacks every tab's content
+            // *before* the strip, so it would visit every node of every tab built so far, parsing
+            // the selector afresh at each one -- and this runs whenever the minimum is recomputed,
+            // i.e. on every layout pass of a window resize.
+            private Node tabHeaderArea() {
+                for (Node child : getChildrenUnmodifiable())
+                    if (child.getStyleClass().contains(TAB_HEADER_AREA_STYLE_CLASS))
+                        return child;
+                return null;
+            }
+
+            private double largestTabMinimum(boolean width) {
+                double largest = 0;
+                for (Tab tab : getTabs()) {
+                    Node content = tab.getContent();
+                    if (content != null)
+                        largest = Math.max(largest, width ? content.minWidth(-1) : content.minHeight(-1));
+                }
+                return largest;
+            }
+        };
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        Tab mmuTab = new Tab("MMU", buildMmuTabContent(viewModel));
-        Tab tlbTab = new Tab("TLB", buildTlbTabContent(viewModel));
-        Tab osTab = new Tab("OS", buildOsTabContent(viewModel));
-        Tab memoryTab = new Tab("Memory", buildMemoryTabContent(viewModel));
+        // Only the selected tab is built here; the others are built the first time they are shown (see
+        // lazyTab). Every tab is a full schematic of hundreds of nodes, and this whole view is built again
+        // each time the UI scale changes (see UiScale), so building the three hidden ones each time
+        // would make every resize several times slower for nothing.
+        Tab mmuTab = lazyTab("MMU", () -> buildMmuTabContent(viewModel));
+        Tab tlbTab = lazyTab("TLB", () -> buildTlbTabContent(viewModel));
+        Tab osTab = lazyTab("OS", () -> buildOsTabContent(viewModel));
+        Tab memoryTab = lazyTab("Memory", () -> buildMemoryTabContent(viewModel));
 
         tabPane.getTabs().addAll(mmuTab, tlbTab, osTab, memoryTab);
 
@@ -342,15 +456,40 @@ public class SimulationView {
                 mmuTab, SimulationComponent.MMU, tlbTab, SimulationComponent.TLB,
                 osTab, SimulationComponent.OS, memoryTab, SimulationComponent.MEMORY);
 
+        // This view is rebuilt whenever the UI scale changes (see UiScale), and the view model
+        // outlives it -- so it remembers which tab was up, and the rebuilt view opens on the same one.
+        SimulationComponent remembered = viewModel.selectedComponentProperty().get();
+        tabComponents.forEach((tab, component) -> {
+            if (component == remembered)
+                tabPane.getSelectionModel().select(tab);
+        });
+        buildTabContentIfPending(tabPane.getSelectionModel().getSelectedItem());
+
         // First (and only) place tab selection is tracked anywhere in this app -- the badges below
         // are the reason it's needed: a focused tab must never show its own notification.
-        tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) ->
-                viewModel.selectedComponentProperty().set(tabComponents.get(newTab)));
+        tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+            buildTabContentIfPending(newTab);
+            viewModel.selectedComponentProperty().set(tabComponents.get(newTab));
+        });
         viewModel.selectedComponentProperty().set(tabComponents.get(tabPane.getSelectionModel().getSelectedItem()));
 
         tabComponents.forEach((tab, component) -> attachNotificationBadge(tab, viewModel, component));
 
         return tabPane;
+    }
+
+    // A tab whose real content is only built when it is first shown; until then it holds an empty
+    // placeholder (which asks for no room and has nothing to style).
+    private Tab lazyTab(String title, Supplier<Node> content) {
+        Tab tab = new Tab(title, new Region());
+        pendingTabContent.put(tab, content);
+        return tab;
+    }
+
+    private void buildTabContentIfPending(Tab tab) {
+        Supplier<Node> content = pendingTabContent.remove(tab);
+        if (content != null)
+            tab.setContent(content.get());
     }
 
     // Tab.setGraphic() is a plain, synchronous, first-class API -- no skin timing to work around --
@@ -360,7 +499,9 @@ public class SimulationView {
     // the graphic isn't set there in the first place -- hence attaching/detaching the whole node
     // rather than trying to shrink it to nothing while inactive.
     private void attachNotificationBadge(Tab tab, SimulationViewModel viewModel, SimulationComponent component) {
-        Circle badge = new Circle(TAB_NOTIFICATION_BADGE_RADIUS, Color.web("#3498db"));
+        // Filled by CSS (.tab-notification-badge), like every other colour, so the theme decides it.
+        Circle badge = new Circle(TAB_NOTIFICATION_BADGE_RADIUS);
+        badge.getStyleClass().add("tab-notification-badge");
         double slotSize = TAB_NOTIFICATION_BADGE_RADIUS * 2 + TAB_NOTIFICATION_BADGE_GAP;
         StackPane badgeSlot = new StackPane(badge);
         badgeSlot.setMinSize(slotSize, TAB_NOTIFICATION_BADGE_RADIUS * 2);
@@ -369,13 +510,16 @@ public class SimulationView {
 
         BooleanProperty notified = viewModel.tabNotificationProperty(component);
         Runnable syncGraphic = () -> tab.setGraphic(notified.get() ? badgeSlot : null);
-        notified.addListener((o, ov, nv) -> syncGraphic.run());
+        ChangeListener<Boolean> onNotificationChanged = (o, ov, nv) -> syncGraphic.run();
+        notified.addListener(onNotificationChanged);
+        teardown.add(() -> notified.removeListener(onNotificationChanged));
         syncGraphic.run();
     }
 
     private Node buildMemoryTabContent(SimulationViewModel viewModel) {
         if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
             MemoryTabViewModel memoryTabViewModel = new MemoryTabViewModel(pageContext, viewModel);
+            teardown.add(memoryTabViewModel::dispose);
             return new MemoryTabView(memoryTabViewModel);
         }
 
@@ -387,6 +531,7 @@ public class SimulationView {
     private Node buildOsTabContent(SimulationViewModel viewModel) {
         if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
             PagedOSTabViewModel osTabViewModel = new PagedOSTabViewModel(pageContext, viewModel);
+            teardown.add(osTabViewModel::dispose);
             return new PagedOSTabView(osTabViewModel);
         }
 
@@ -399,6 +544,7 @@ public class SimulationView {
     private Node buildMmuTabContent(SimulationViewModel viewModel) {
         if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
             PagedMMUTabViewModel mmuTabViewModel = new PagedMMUTabViewModel(pageContext, viewModel);
+            teardown.add(mmuTabViewModel::dispose);
             return new PagedMMUTabView(mmuTabViewModel);
         }
 
@@ -418,6 +564,7 @@ public class SimulationView {
     private Node buildTlbTabContent(SimulationViewModel viewModel) {
         if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
             PagedTLBTabViewModel tlbTabViewModel = new PagedTLBTabViewModel(pageContext, viewModel);
+            teardown.add(tlbTabViewModel::dispose);
             return new PagedTLBTabView(tlbTabViewModel);
         }
 
@@ -435,7 +582,7 @@ public class SimulationView {
         // the widest real content here is the nav-button rows below, so this keeps the panel (and
         // so the SplitPane divider) from ever landing narrower than what "◀ Previous"/"Next ▶"
         // actually need -- no hand-picked pixel constant standing in for that measurement.
-        VBox rightSidebar = new VBox(12) {
+        VBox rightSidebar = new VBox(UiScale.px(12)) {
             @Override
             protected double computeMinWidth(double height) {
                 return Math.max(SIDEBAR_MIN_WIDTH, super.computePrefWidth(height));
@@ -449,7 +596,7 @@ public class SimulationView {
         rightSidebar.getStyleClass().add("sidebar-panel");
 
         Label logHeader = new Label("Execution Log");
-        logHeader.getStyleClass().add("column-header");
+        logHeader.getStyleClass().add("section-title");
 
         ListView<StepDescription> logListView = new ListView<>(viewModel.getLogEntries());
         logListView.getStyleClass().addAll("execution-log", "slim-scroll");
@@ -469,22 +616,30 @@ public class SimulationView {
             });
             return cell;
         });
-        logListView.setPrefHeight(220);
+        logListView.setPrefHeight(EXECUTION_LOG_PREF_HEIGHT);
 
         // Follow the log as new steps are appended, so a step landing past the visible window
         // (the common case once the log outgrows the fixed-height panel) scrolls into view rather
         // than requiring the user to notice and scroll down manually.
-        viewModel.getLogEntries().addListener((ListChangeListener<StepDescription>) change -> {
+        ListChangeListener<StepDescription> followLog = change -> {
             while (change.next()) {
                 if (change.wasAdded()) {
                     int lastIndex = viewModel.getLogEntries().size() - 1;
                     Platform.runLater(() -> logListView.scrollTo(lastIndex));
                 }
             }
-        });
+        };
+        viewModel.getLogEntries().addListener(followLog);
+        teardown.add(() -> viewModel.getLogEntries().removeListener(followLog));
+        // A view rebuilt mid-simulation (see UiScale) starts with the log already populated, and
+        // should open at its end like the one it replaces was.
+        if (!viewModel.getLogEntries().isEmpty()) {
+            int lastIndex = viewModel.getLogEntries().size() - 1;
+            new PostLayoutTask(logListView, () -> logListView.scrollTo(lastIndex), false).request();
+        }
 
         Label stepDescHeader = new Label("Step Description");
-        stepDescHeader.getStyleClass().add("column-header");
+        stepDescHeader.getStyleClass().add("section-title");
 
         Label stepDescLabel = new Label();
         stepDescLabel.textProperty().bind(Bindings.createStringBinding(
@@ -543,7 +698,7 @@ public class SimulationView {
         nextBtn.getStyleClass().add("button-primary");
         nextBtn.setOnAction(e -> viewModel.executeNextStep());
 
-        HBox navBox = new HBox(10, prevBtn, nextBtn);
+        HBox navBox = new HBox(UiScale.px(10), prevBtn, nextBtn);
         matchWidth(prevBtn, nextBtn);
 
         Label instructionCounterLabel = new Label();
@@ -565,7 +720,7 @@ public class SimulationView {
         nextInstructionBtn.getStyleClass().add("button-primary");
         nextInstructionBtn.setOnAction(e -> viewModel.executeNextInstruction());
 
-        HBox instructionNavBox = new HBox(10, instructionStartBtn, nextInstructionBtn);
+        HBox instructionNavBox = new HBox(UiScale.px(10), instructionStartBtn, nextInstructionBtn);
         matchWidth(instructionStartBtn, nextInstructionBtn);
 
         rightSidebar.getChildren().addAll(

@@ -1,6 +1,6 @@
 package rs.ac.bg.etf.view;
 
-import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.StringProperty;
 import javafx.collections.ListChangeListener;
@@ -12,9 +12,7 @@ import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -27,6 +25,9 @@ import rs.ac.bg.etf.view.inspector.PageTableInspectorWindow;
 import rs.ac.bg.etf.view.shape.BitWidthLine;
 import rs.ac.bg.etf.view.shape.CurlyBrace;
 import rs.ac.bg.etf.view.util.FieldBoxes;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.SchematicTab;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.viewmodel.PagedMMUTabViewModel;
@@ -39,88 +40,100 @@ import java.util.List;
  * Paged MMU tab: address-computation schematic (VA/PA field boxes, page-table-pointer adder,
  * and the windowed page table) connected by lines, mirroring the paged-MMU hardware diagram.
  */
-public class PagedMMUTabView extends StackPane {
-    // Field-box font/padding/height live in FieldBoxes now (shared with the TLB tab); aliased here so
-    // the many BOX_HEIGHT/FIELD_FONT call sites below stay unchanged.
-    private static final Font FIELD_FONT = FieldBoxes.FIELD_FONT;
-    private static final Font TITLE_FONT = Font.font("IBM Plex Sans", javafx.scene.text.FontWeight.BOLD, 11);
-    private static final double TITLE_PADDING = 40;
-    private static final double MIN_FIELD_WIDTH = FieldBoxes.MIN_FIELD_WIDTH;
-    private static final double BOX_HEIGHT = FieldBoxes.BOX_HEIGHT;
+public class PagedMMUTabView extends SchematicTab {
+    private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
+
+    // Every length below is a design-size (1080p) value passed through UiScale.px() -- and every font
+    // through UiScale.font() -- at the scale this tab is built at. The screen is rebuilt when the UI
+    // scale changes, so they are fixed for this instance's lifetime, hence instance fields (kept in
+    // the constants' UPPER_CASE names so the many call sites below read as before).
+
+    // Field-box font/padding/height live in FieldBoxes (shared with the TLB tab); aliased here so the
+    // many BOX_HEIGHT/FIELD_FONT call sites below stay unchanged.
+    private final Font FIELD_FONT = FieldBoxes.fieldFont();
+    private final Font TITLE_FONT = Font.font("IBM Plex Sans", javafx.scene.text.FontWeight.BOLD, UiScale.font(11));
+    private final double TITLE_PADDING = UiScale.px(40);
+    private final double MIN_FIELD_WIDTH = FieldBoxes.minFieldWidth();
+    private final double BOX_HEIGHT = FieldBoxes.boxHeight();
     // Shorter than BOX_HEIGHT -- used only by the paired VA/PA address fields (Page|Word, Block|Word),
     // not the solo Page Table Pointer box, which keeps the taller BOX_HEIGHT. See FieldBoxes' own doc
     // comment on ADDRESS_BOX_HEIGHT for why the two diverge.
-    private static final double ADDRESS_BOX_HEIGHT = FieldBoxes.ADDRESS_BOX_HEIGHT;
-    private static final double ADDRESS_FIELD_PADDING = FieldBoxes.ADDRESS_FIELD_PADDING;
-    // Floor, not a fixed size: the canvas grows to fill the tab's real width (see the ScrollPane's
-    // setFitToWidth below) and PA is bound to that live width, never a hardcoded pixel canvas size --
-    // this is just the minimum needed so the schematic isn't squeezed narrower than its content.
-    private static final double MIN_CANVAS_WIDTH = 920;
-    private static final double CANVAS_HEIGHT = 780;
-    private static final double MARGIN = 30;
+    private final double ADDRESS_BOX_HEIGHT = FieldBoxes.addressBoxHeight();
+    private final double ADDRESS_FIELD_PADDING = FieldBoxes.addressFieldPadding();
+    // Gap between a field title and the box it labels.
+    private final double TITLE_GAP = FieldBoxes.titleGap();
+    // Starting estimates, not fixed sizes: the canvas grows to fill the tab's real viewport (see
+    // SchematicTab.mountCanvas) and PA is bound to that live width, never a hardcoded pixel canvas
+    // size. MIN_CANVAS_WIDTH is a floor under the width derived from the laid-out table (see the
+    // designWidth binding below); CANVAS_HEIGHT only stands in until the block wire's real bottom
+    // edge has been measured (see updateDynamicConnectors), so a wider config never ends up with
+    // wires running through the table.
+    private final double MIN_CANVAS_WIDTH = UiScale.px(920);
+    private final double CANVAS_HEIGHT = UiScale.px(780);
+    private final double MARGIN = UiScale.px(30);
+    // How far the block wire's rising leg must stay clear of the table's right edge -- room for the
+    // wire's own tick + "Nb" tag, which ride to that leg's side.
+    private final double BLOCK_WIRE_CLEARANCE = UiScale.px(60);
+    // How far below the table's bottom edge the block wire drops before turning toward PA Block.
+    private final double BLOCK_DROP_LENGTH = UiScale.px(80);
     // Every field that drops straight down from the page table's bottom edge uses this wire length, so
     // that their bit-width indicators (each drawn at its wire's midpoint) sit on one horizontal row.
-    private static final double DROP_LENGTH = 40;
-    private static final double DROP_INDICATOR_Y = DROP_LENGTH / 2;
+    private final double DROP_LENGTH = UiScale.px(40);
+    private final double DROP_INDICATOR_Y = DROP_LENGTH / 2;
     // Vertical gap between the descriptor-size brace's ends and the table's own top border, and how
     // far its tip then bulges upward from there, toward the "2^N words" label above it.
-    private static final double DESCRIPTOR_BRACE_GAP = 3;
-    private static final double DESCRIPTOR_BRACE_DEPTH = 16;
+    private final double DESCRIPTOR_BRACE_GAP = UiScale.px(3);
+    private final double DESCRIPTOR_BRACE_DEPTH = UiScale.px(16);
     // Gap between the "Page Table" title's own bottom and the brace's left end, which it sits above.
-    private static final double TABLE_TITLE_GAP = 6;
-    private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
-
-    private final Pane canvas = new Pane();
+    private final double TABLE_TITLE_GAP = UiScale.px(6);
 
     private PagedMMUTabViewModel viewModel;
 
     public PagedMMUTabView(PagedMMUTabViewModel viewModel) {
         this.viewModel = viewModel;
-        getStyleClass().add("mmu-tab-container");
-        canvas.setMinWidth(MIN_CANVAS_WIDTH);
-        canvas.setPrefHeight(CANVAS_HEIGHT);
+        canvas.designHeightProperty().set(CANVAS_HEIGHT);
 
         // ---- Standalone field width: Table Offset has no rendered box of its own (its value rides
         // a wire label instead -- see below), only this phantom width for layout math. ----
         double offsetBoxW = titledFieldWidth("Table Offset", ValueConverter.hexDigitsFor(viewModel.getOffsetBits()));
 
-        double boxY = 78;
+        double boxY = UiScale.px(78);
 
         // ---- Virtual Address: Page | Word, rendered as one divided box (no gap, shared border) ----
-        Region pageBox = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.pageHexProperty(), ValueConverter.hexDigitsFor(viewModel.getPageBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
+        Region pageBox = FieldBoxes.valueCell("field-box-cell-left", viewModel.pageHexProperty(), ValueConverter.hexDigitsFor(viewModel.getPageBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double pageBoxW = pageBox.getPrefWidth();
         double pageBoxX = MARGIN;
         pageBox.setLayoutX(pageBoxX);
         pageBox.setLayoutY(boxY);
 
-        Region wordBoxVA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.wordHexProperty(), ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
+        Region wordBoxVA = FieldBoxes.valueCell("field-box-cell-right", viewModel.wordHexProperty(), ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double wordBoxW = wordBoxVA.getPrefWidth();
         double wordBoxVAX = pageBoxX + pageBoxW;
         wordBoxVA.setLayoutX(wordBoxVAX);
         wordBoxVA.setLayoutY(boxY);
 
-        Label pageTitle = FieldBoxes.fieldTitle("Page", pageBox, boxY - 20);
-        Label wordTitleVA = FieldBoxes.fieldTitle("Word", wordBoxVA, boxY - 20);
+        Label pageTitle = FieldBoxes.fieldTitle("Page", pageBox, boxY - TITLE_GAP);
+        Label wordTitleVA = FieldBoxes.fieldTitle("Word", wordBoxVA, boxY - TITLE_GAP);
 
         // ---- Physical Address: Block | Word, mirrored on the right with the same adjacent-box treatment.
         // Bound to the canvas's own live width (which itself grows to fill the tab -- see the
         // ScrollPane's setFitToWidth below), not a fixed pixel canvas size, so PA always sits flush
         // against the tab's real right edge instead of pinned at some fixed offset that leaves unused
         // space on a wider window. ----
-        Region wordBoxPA = FieldBoxes.valueCell("va-breakdown-cell-right", viewModel.paWordHexProperty(), ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
+        Region wordBoxPA = FieldBoxes.valueCell("field-box-cell-right", viewModel.paWordHexProperty(), ValueConverter.hexDigitsFor(viewModel.getWordBits()), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         wordBoxPA.layoutXProperty().bind(canvas.widthProperty().subtract(MARGIN).subtract(wordBoxW));
         wordBoxPA.setLayoutY(boxY);
 
-        Region blockBoxPA = FieldBoxes.valueCell("va-breakdown-cell-left", viewModel.blockHexProperty(), viewModel.blockHexDigitsProperty().get(), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
+        Region blockBoxPA = FieldBoxes.valueCell("field-box-cell-left", viewModel.blockHexProperty(), viewModel.blockHexDigitsProperty().get(), ADDRESS_BOX_HEIGHT, ADDRESS_FIELD_PADDING);
         double blockBoxW = blockBoxPA.getPrefWidth();
         blockBoxPA.layoutXProperty().bind(wordBoxPA.layoutXProperty().subtract(blockBoxW));
         blockBoxPA.setLayoutY(boxY);
 
-        Label blockTitle = FieldBoxes.fieldTitle("Block", blockBoxPA, boxY - 20);
-        Label wordTitlePA = FieldBoxes.fieldTitle("Word", wordBoxPA, boxY - 20);
+        Label blockTitle = FieldBoxes.fieldTitle("Block", blockBoxPA, boxY - TITLE_GAP);
+        Label wordTitlePA = FieldBoxes.fieldTitle("Word", wordBoxPA, boxY - TITLE_GAP);
 
-        Label vaHeader = FieldBoxes.sectionLabel("Virtual Address", pageBoxX, 20);
-        Label paHeader = FieldBoxes.sectionLabel("Physical Address", 0, 20);
+        Label vaHeader = FieldBoxes.sectionLabel("Virtual Address", pageBoxX, UiScale.px(20));
+        Label paHeader = FieldBoxes.sectionLabel("Physical Address", 0, UiScale.px(20));
         paHeader.layoutXProperty().bind(blockBoxPA.layoutXProperty());
 
         // ---- Word pass-through: VA Word flows straight across into PA Word, unchanged ----
@@ -128,7 +141,7 @@ public class PagedMMUTabView extends StackPane {
         // for why an elbow is a chain of segments rather than one multi-point shape). The bit-width
         // tag shows on both vertical legs, matching the original two-sided "Nb" labelling; the
         // horizontal leg in between carries none.
-        double passY = boxY + ADDRESS_BOX_HEIGHT + 40;
+        double passY = boxY + ADDRESS_BOX_HEIGHT + UiScale.px(40);
         double wordVACenterX = wordBoxVAX + wordBoxW / 2;
         // PA Word's own centre moves whenever wordBoxPA's live-bound layoutX does, so this has to be
         // a binding too, not a one-time double, or the wire would stay put while PA slides away from it.
@@ -167,15 +180,15 @@ public class PagedMMUTabView extends StackPane {
         // ---- Page -> page-table offset (page bits concatenated with a fixed shift-bit zero fill) ----
         // There is no standalone box for this value anymore; it is shown as a label riding the wire
         // that carries it from the merge brace down into the adder.
-        double offsetBoxY = 220;
+        double offsetBoxY = UiScale.px(220);
         double offsetBoxX = pageBoxX;
 
         // The page line and the zero-fill line merge into a single offset value via a curly brace;
         // its ears sit a fixed gap above the merge point so there's room for the brace curve + stub.
         // The feeding lines and the merge stub stop short of the brace, leaving a visible gap.
-        double braceTopY = offsetBoxY - 10;
-        double braceDepth = 20;
-        double braceGap = 8;
+        double braceTopY = offsetBoxY - UiScale.px(10);
+        double braceDepth = UiScale.px(20);
+        double braceGap = UiScale.px(8);
         // The tip's true X depends on both ears (page-box center and the zero-fill line's X), so the
         // stub below the brace must target that same point exactly, or it reads as a slight bend.
         // The multiplier widens the brace's span past the page box's own width -- there's plenty of
@@ -208,15 +221,15 @@ public class PagedMMUTabView extends StackPane {
         BitWidthLine shiftDownLine = bitWidthWire(viewModel.getShiftBits());
         shiftDownLine.arrowTipVisibleProperty().set(false);
         shiftDownLine.startXProperty().set(shiftLineX);
-        shiftDownLine.startYProperty().set(boxY + ADDRESS_BOX_HEIGHT + 50);
+        shiftDownLine.startYProperty().set(boxY + ADDRESS_BOX_HEIGHT + UiScale.px(50));
 
         Label zeroFillLabel = new Label("0");
-        zeroFillLabel.getStyleClass().add("mmu-bit-value");
+        zeroFillLabel.getStyleClass().add("wire-value-label");
         zeroFillLabel.setLayoutX(shiftLineX);
         // Sits a fixed gap above the wire's own start point, but pinned there via the label's own
         // live height -- not a hand-tuned Y offset -- so it stays clear of the wire regardless of
-        // how big .mmu-bit-value's font is; no more re-tuning this by hand each time that changes.
-        double zeroFillGap = 6;
+        // how big .wire-value-label's font is; no more re-tuning this by hand each time that changes.
+        double zeroFillGap = UiScale.px(6);
         zeroFillLabel.layoutYProperty().bind(
                 shiftDownLine.startYProperty().subtract(zeroFillLabel.heightProperty()).subtract(zeroFillGap));
 
@@ -232,22 +245,22 @@ public class PagedMMUTabView extends StackPane {
         shiftDownLine.endYProperty().bind(offsetBrace.rightYProperty().subtract(braceGap));
 
         // ---- Page table pointer (base address of the current user's page table) ----
-        double pointerBoxX = offsetBoxX + offsetBoxW + 90;
+        double pointerBoxX = offsetBoxX + offsetBoxW + UiScale.px(90);
         double pointerBoxY = offsetBoxY;
         // Title sits outside/above the box, like every other field box in this schematic -- not
         // stacked inside it -- so the box itself is sized to the value alone, not the (wider) title.
         Region pointerBox = FieldBoxes.valueCell(
-                "va-breakdown-cell-solo", viewModel.pageTablePointerHexProperty(),
+                "field-box-cell-solo", viewModel.pageTablePointerHexProperty(),
                 ValueConverter.hexDigitsFor(viewModel.getPhysicalAddressBits()));
         pointerBox.setLayoutX(pointerBoxX);
         pointerBox.setLayoutY(pointerBoxY);
         double pointerBoxW = pointerBox.getPrefWidth();
-        Label pointerTitle = FieldBoxes.fieldTitle("Page Table Pointer", pointerBox, pointerBoxY - 20);
+        Label pointerTitle = FieldBoxes.fieldTitle("Page Table Pointer", pointerBox, pointerBoxY - TITLE_GAP);
 
         // ---- Adder: page table pointer + table offset = descriptor's physical address ----
         double adderCenterX = mergeCenterX;
-        double adderCenterY = offsetBoxY + BOX_HEIGHT + 70;
-        double adderRadius = 18;
+        double adderCenterY = offsetBoxY + BOX_HEIGHT + UiScale.px(70);
+        double adderRadius = UiScale.px(18);
 
         // A StackPane centers its children by bounds, so the "+" sits exactly in the middle of the
         // circle regardless of font metrics (unlike hardcoded pixel offsets).
@@ -322,16 +335,16 @@ public class PagedMMUTabView extends StackPane {
         // Shifted right of the adder's own column (rather than tucked close behind it) so the
         // addressDown wire's value label -- which rides the gap between the wire and the table --
         // has room to grow for a wide physical address without its text reaching the table's border.
-        double tableX = pointerBoxX + 30;
-        double tableY = adderCenterY + 90;
+        double tableX = pointerBoxX + UiScale.px(30);
+        double tableY = adderCenterY + UiScale.px(90);
 
         // (tableX, tableY - 24) is only a sane pre-layout placeholder; updateDynamicConnectors
         // repositions it live to sit just above the descriptor-size brace's own left end.
-        Label tableHeaderLabel = FieldBoxes.sectionLabel("Page Table", tableX, tableY - 24);
-        // "Page Table" and the TLB tab's "TLB" title share .table-title (see PagedTLBTabView),
-        // distinct from the plain .mmu-section-label the VA/PA/Process headers keep.
-        tableHeaderLabel.getStyleClass().remove("mmu-section-label");
-        tableHeaderLabel.getStyleClass().add("table-title");
+        Label tableHeaderLabel = FieldBoxes.sectionLabel("Page Table", tableX, tableY - UiScale.px(24));
+        // "Page Table" and the TLB tab's "TLB" title share .schematic-heading (see PagedTLBTabView),
+        // distinct from the plain .schematic-heading the VA/PA/Process headers keep.
+        tableHeaderLabel.getStyleClass().remove("schematic-heading");
+        tableHeaderLabel.getStyleClass().add("schematic-heading");
 
         // Curly brace spanning just the descriptor's own columns (V/D/Block/Disk -- Index is a
         // display aid, not part of the stored entry), so it's visually obvious why the page number
@@ -343,15 +356,29 @@ public class PagedMMUTabView extends StackPane {
         CurlyBrace descriptorSizeBrace = new CurlyBrace();
         descriptorSizeBrace.depthProperty().set(-DESCRIPTOR_BRACE_DEPTH);
         Label descriptorSizeLabel = new Label("2" + toSuperscript(viewModel.getShiftBits()) + " words");
-        descriptorSizeLabel.getStyleClass().addAll("mmu-bit-width", "mmu-descriptor-size-label");
+        descriptorSizeLabel.getStyleClass().addAll("bit-width-label", "mmu-descriptor-size-label");
 
         PageTableView pageTableView = new PageTableView(viewModel);
         pageTableView.setLayoutX(tableX);
         pageTableView.setLayoutY(tableY);
 
+        // The narrowest the schematic can be drawn without the block wire's rising leg (which runs
+        // up beside PA Block's centre) cutting through the table: table's right edge, a run-out for
+        // the wire's own tag, then PA Block's half-width and PA Word flush to the margin. Derived
+        // from the table's real laid-out width -- which grows with the configured Block/Disk hex
+        // digits -- so a wider configuration widens the design size instead of overlapping. Only the
+        // table's own width is read, never the canvas's, so this can't chase its own tail. The
+        // table's preferred width (fixed cell widths, known at construction) backs up the live
+        // width, so the minimum is already right before this tab has ever been laid out.
+        canvas.designWidthProperty().bind(Bindings.createDoubleBinding(
+                () -> Math.max(MIN_CANVAS_WIDTH,
+                        tableX + Math.max(pageTableView.prefWidth(-1), pageTableView.getWidth())
+                                + BLOCK_WIRE_CLEARANCE + blockBoxW / 2 + wordBoxW + MARGIN),
+                pageTableView.widthProperty()));
+
         // Clicking the schematic's small (7-row) preview opens a separate, resizable window that
         // browses the full table (up to 2^pageBits entries) for any user, not just the current one.
-        pageTableView.getStyleClass().add("page-table-clickable");
+        pageTableView.getStyleClass().add("data-table-clickable");
         pageTableView.setCursor(javafx.scene.Cursor.HAND);
         PageTableInspectorWindow pageTableInspector =
                 new PageTableInspectorWindow(viewModel.getContext(), viewModel.currentStepNumberProperty());
@@ -428,21 +455,25 @@ public class PagedMMUTabView extends StackPane {
                 blockBoxPA, blockDownNear, blockDownFar, blockAcross, blockUpFar, blockUpNear, vDrop, dDrop, diskDrop,
                 descriptorSizeBrace, descriptorSizeLabel, tableHeaderLabel);
 
-        pageTableView.currentEntryAnchorProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateDynamicConnectors));
-        canvas.widthProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateDynamicConnectors));
-        canvas.heightProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateDynamicConnectors));
+        // Once per pulse, right after layout (see PostLayoutTask) -- not one runLater per change, which
+        // re-routed every wire several times per resize pass and always a frame behind the boxes.
+        PostLayoutTask reroute = new PostLayoutTask(this, updateDynamicConnectors);
+
+        pageTableView.currentEntryAnchorProperty().addListener((obs, oldVal, newVal) -> reroute.request());
+        canvas.widthProperty().addListener((obs, oldVal, newVal) -> reroute.request());
+        canvas.heightProperty().addListener((obs, oldVal, newVal) -> reroute.request());
         // The table's own height can still settle a pass or two after the initial layout (e.g. once
         // header/row label fonts finish measuring), which would otherwise leave the drop wires below
         // pinned to a stale, taller tableBottom -- so re-route whenever it actually changes too.
-        pageTableView.heightProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateDynamicConnectors));
+        pageTableView.heightProperty().addListener((obs, oldVal, newVal) -> reroute.request());
         // currentEntryAnchor is a recycled row node (PageTableView's fixed 7-row pool), so it often
         // comes back to the exact same Region reference across different steps/pages (e.g. the
         // addressed page landing in the pool's middle slot every time it isn't clamped near either
         // end of the table) -- an ObjectProperty.set() to an unchanged reference never fires its
         // listener, so the anchor-based re-route above can silently go stale for that slot. Stepping
         // always changes this property, so listening to it too guarantees a fresh recompute every step.
-        viewModel.currentStepNumberProperty().addListener((obs, oldVal, newVal) -> Platform.runLater(updateDynamicConnectors));
-        Platform.runLater(updateDynamicConnectors);
+        viewModel.currentStepNumberProperty().addListener((obs, oldVal, newVal) -> reroute.request());
+        reroute.request();
 
         // ---- Wires/labels only light up once the step that uses them has actually executed ----
         bindActive(pageDownLine, viewModel.lineActiveProperty(MmuLine.PAGE_TO_OFFSET));
@@ -477,15 +508,10 @@ public class PagedMMUTabView extends StackPane {
             bindActive(drop.valueLabel(), viewModel.pageTableAccessedProperty());
         }
 
-        ScrollPane scrollPane = new ScrollPane(canvas);
-        scrollPane.getStyleClass().addAll("mmu-scroll-pane", "slim-scroll");
-        // Grows canvas to fill the viewport's real width when it's wider than MIN_CANVAS_WIDTH (never
-        // narrower -- canvas's own minWidth floors it there, so content still scrolls horizontally
-        // below that), which is what lets Physical Address's live binding actually reach the tab's
-        // true right edge instead of a fixed pixel canvas size.
-        scrollPane.setFitToWidth(true);
-
-        getChildren().add(scrollPane);
+        // Grows the canvas to fill the viewport (never below its design size), which is what lets
+        // Physical Address's live binding actually reach the tab's true right edge instead of a
+        // fixed pixel canvas size.
+        mountCanvas();
         getChildren().add(buildSideNoteOverlay(viewModel));
     }
 
@@ -495,7 +521,7 @@ public class PagedMMUTabView extends StackPane {
     // overlay pinned to this StackPane directly (a sibling of the ScrollPane, not inside the
     // canvas), so it can never collide with the schematic's own layout math and stays visible
     // regardless of scroll position. The entry itself is rendered as an actual little page-table
-    // (reusing .page-table-view/.page-table-header/.page-table-row/.page-table-cell verbatim) so
+    // (reusing .data-table/.data-table-header/.data-table-row/.data-table-cell verbatim) so
     // it reads as "here is that row," not another line of step-description prose.
     private Node buildSideNoteOverlay(PagedMMUTabViewModel viewModel) {
         Label headline = new Label();
@@ -511,7 +537,7 @@ public class PagedMMUTabView extends StackPane {
         dismissButton.getStyleClass().add("side-effect-note-dismiss");
         dismissButton.setOnAction(e -> viewModel.dismissSideNote());
 
-        HBox header = new HBox(6, headline, userLabel, spacer, dismissButton);
+        HBox header = new HBox(UiScale.px(6), headline, userLabel, spacer, dismissButton);
         header.getStyleClass().add("side-effect-note-header");
         header.setAlignment(Pos.CENTER_LEFT);
 
@@ -531,13 +557,13 @@ public class PagedMMUTabView extends StackPane {
         HBox headerRow = new HBox(
                 tableCell("Index", indexWidth), tableCell("V", bitWidth), tableCell("D", bitWidth),
                 tableCell("Block", blockWidth), tableCell("Disk", diskWidth));
-        headerRow.getStyleClass().add("page-table-header");
+        headerRow.getStyleClass().add("data-table-header");
         HBox dataRow = new HBox(indexCell, vCell, dCell, blockCell, diskCell);
-        dataRow.getStyleClass().add("page-table-row");
+        dataRow.getStyleClass().add("data-table-row");
         VBox miniTable = new VBox(headerRow, dataRow);
-        miniTable.getStyleClass().add("page-table-view");
+        miniTable.getStyleClass().add("data-table");
 
-        VBox card = new VBox(6, header, miniTable);
+        VBox card = new VBox(UiScale.px(6), header, miniTable);
         card.getStyleClass().add("side-effect-note-card");
         // A Region's default max width/height is unbounded, so without capping both, StackPane
         // stretches this to fill the whole tab (exactly what happened before this fix).
@@ -569,7 +595,7 @@ public class PagedMMUTabView extends StackPane {
 
     private Label tableCell(String text, double width) {
         Label label = new Label(text);
-        label.getStyleClass().add("page-table-cell");
+        label.getStyleClass().add("data-table-cell");
         label.setMinWidth(width);
         label.setPrefWidth(width);
         label.setMaxWidth(width);
@@ -615,7 +641,7 @@ public class PagedMMUTabView extends StackPane {
 
             descriptorSizeLabel.autosize();
             descriptorSizeLabel.setLayoutX(descriptorSizeBrace.tipXProperty().get() - descriptorSizeLabel.getWidth() / 2.0);
-            descriptorSizeLabel.setLayoutY(descriptorSizeBrace.tipYProperty().get() - descriptorSizeLabel.getHeight() - 4);
+            descriptorSizeLabel.setLayoutY(descriptorSizeBrace.tipYProperty().get() - descriptorSizeLabel.getHeight() - UiScale.px(4));
 
             // "Page Table" sits at the table's own left edge, level with the brace above it.
             tableHeaderLabel.autosize();
@@ -657,22 +683,26 @@ public class PagedMMUTabView extends StackPane {
             addressAcross.endYProperty().set(targetWireCenterY);
         }
 
-        // Pull vector components to front to prevent Z-order overlapping visibility clips
-        addressDown.toFront();
-        addressAcross.toFront();
-
         // =========================================================================
         // BLOCK PASSTHROUGH WIRE CONTROLLER (Keep your existing working block line logic)
         // =========================================================================
         Region blockColumnAnchor = pageTableView.blockColumnAnchorProperty().get();
-        if (blockColumnAnchor != null && blockColumnAnchor.getScene() != null && blockBoxPA.getScene() != null && tableBounds != null) {
+        boolean routeBlock = blockColumnAnchor != null && blockColumnAnchor.getScene() != null
+                && blockBoxPA.getScene() != null && tableBounds != null;
+        if (routeBlock) {
             Bounds columnBounds = canvas.sceneToLocal(blockColumnAnchor.localToScene(blockColumnAnchor.getBoundsInLocal()));
             Bounds blockBoxBounds = canvas.sceneToLocal(blockBoxPA.localToScene(blockBoxPA.getBoundsInLocal()));
 
             double columnX = columnBounds.getCenterX();
             double tableBottom = tableBounds.getMaxY();
-            double dropY = tableBottom + 80;
+            double dropY = tableBottom + BLOCK_DROP_LENGTH;
             double boxCenterX = blockBoxBounds.getCenterX();
+
+            // The wire's lowest point is the schematic's bottom edge, so the design height is exactly
+            // that plus a margin -- CANVAS_HEIGHT is only the estimate used until this first runs.
+            // Measured from the table's own geometry (not the viewport), so it can't depend on the
+            // canvas's current size.
+            canvas.designHeightProperty().set(dropY + MARGIN);
 
             // Block's bit-width tag rides blockDownNear at its own midpoint -- pinned to the same row
             // as the V/D/Disk drops below by choosing that segment's far end so its midpoint lands
@@ -699,7 +729,7 @@ public class PagedMMUTabView extends StackPane {
             // its own midpoint -- where its tag lands -- sits the same 20px below the box edge that
             // wordUpPA's tag does, reading as "the same height" even though the two boxes' bottoms
             // aren't necessarily at the same canvas Y.
-            double blockUpNearStartY = blockBoxBounds.getMaxY() + 40;
+            double blockUpNearStartY = blockBoxBounds.getMaxY() + UiScale.px(40);
 
             blockUpFar.startXProperty().set(boxCenterX);
             blockUpFar.startYProperty().set(dropY);
@@ -710,13 +740,16 @@ public class PagedMMUTabView extends StackPane {
             blockUpNear.startYProperty().set(blockUpNearStartY);
             blockUpNear.endXProperty().set(boxCenterX);
             blockUpNear.endYProperty().set(blockBoxBounds.getMaxY());
-
-            blockDownNear.toFront();
-            blockDownFar.toFront();
-            blockAcross.toFront();
-            blockUpFar.toFront();
-            blockUpNear.toFront();
         }
+
+        // Pull the wires to the front to prevent Z-order overlapping visibility clips: the address
+        // pair first, the block wires above them once those are routed. One call for both groups --
+        // two separate ones would each find the other's wires on top of theirs and reshuffle every run.
+        if (routeBlock)
+            canvas.bringToFront(addressDown, addressAcross,
+                    blockDownNear, blockDownFar, blockAcross, blockUpFar, blockUpNear);
+        else
+            canvas.bringToFront(addressDown, addressAcross);
 
         // =========================================================================
         // V / D / DISK DROP LINES: straight down from the highlighted row's columns
@@ -745,7 +778,7 @@ public class PagedMMUTabView extends StackPane {
         drop.line().endXProperty().set(columnX);
         drop.line().endYProperty().set(dropBottom);
 
-        drop.valueLabel().setLayoutY(dropBottom + 6);
+        drop.valueLabel().setLayoutY(dropBottom + UiScale.px(6));
 
         for (Node node : drop.nodes())
             node.toFront();
@@ -766,13 +799,13 @@ public class PagedMMUTabView extends StackPane {
         // sit only ~30px apart, so that default reach put each label within a few px of the *next*
         // column's own wire. Tightened so the label clears its own tick with real margin to spare
         // before reaching the neighbour.
-        line.tickLengthProperty().set(8);
-        line.labelGapProperty().set(2);
+        line.tickLengthProperty().set(UiScale.px(8));
+        line.labelGapProperty().set(UiScale.px(2));
         line.arrowTipVisibleProperty().set(false);
 
         Label valueLabel = new Label();
         valueLabel.textProperty().bind(hideWhenInactive(valueProperty, activeProperty));
-        valueLabel.getStyleClass().add("mmu-bit-value");
+        valueLabel.getStyleClass().add("wire-value-label");
 
         valueLabel.layoutXProperty().bind(javafx.beans.binding.Bindings.createDoubleBinding(() -> {
             if (columnAnchor != null && columnAnchor.getScene() != null) {
@@ -842,14 +875,14 @@ public class PagedMMUTabView extends StackPane {
     // geometry positions relative to pageBox's own centre -- so it has to grow with the same
     // ADDRESS_FIELD_PADDING pageBox itself now uses, or that assumed-comparable width goes stale
     // and the brace's two ears end up far out of proportion with each other.
-    private static double fieldWidth(int digits) {
+    private double fieldWidth(int digits) {
         Text sample = new Text("0x" + "F".repeat(Math.max(digits, 1)));
         sample.setFont(FIELD_FONT);
         return Math.max(MIN_FIELD_WIDTH, sample.getLayoutBounds().getWidth() + ADDRESS_FIELD_PADDING);
     }
 
     // Wide enough to fit either the widest possible hex value or the field's title text, whichever is larger
-    private static double titledFieldWidth(String title, int digits) {
+    private double titledFieldWidth(String title, int digits) {
         return Math.max(fieldWidth(digits), textWidth(title, TITLE_FONT) + TITLE_PADDING);
     }
 

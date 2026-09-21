@@ -2,7 +2,6 @@ package rs.ac.bg.etf.view.tlb;
 
 import java.util.List;
 
-import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -16,6 +15,8 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Line;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.UiScale;
 
 /**
  * Renders TLB rows with short stub lines fanning out from every row's left edge into a single
@@ -27,9 +28,11 @@ import javafx.scene.shape.Line;
 public class AssociativeTLBView extends StackPane implements TLBBodyView
 {
     private static final PseudoClass ACTIVE = PseudoClass.getPseudoClass("active");
-    // Scaled up alongside the table's own enlarged ("page-table-inline") row size, so the stubs
+    // Scaled up alongside the table's own enlarged ("data-table-schematic") row size, so the stubs
     // still read proportionate to the bigger rows instead of looking stubby against them.
-    private static final double BUS_STUB_LENGTH = 32.0;
+    // Design-size length, scaled to the UI scale this view is built at (an instance field: the screen
+    // is rebuilt when the scale changes).
+    private final double BUS_STUB_LENGTH = UiScale.px(32.0);
 
     private final VBox rowsBox = new VBox();
     // Just the data rows, kept separate from the header so it can be fogged while the header stays crisp.
@@ -41,6 +44,7 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
     private final Region bottomAnchor = new Region();
     private final BooleanProperty active = new SimpleBooleanProperty(false);
     private final ObjectProperty<Region> addressAnchor = new SimpleObjectProperty<>();
+    private final PostLayoutTask reposition = new PostLayoutTask(this, this::repositionLines);
     private final ObjectProperty<Region> tableBottomAnchor = new SimpleObjectProperty<>();
 
     public AssociativeTLBView(TLBRowView header, List<TLBRowView> rows)
@@ -48,9 +52,9 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
         this.rows = rows;
 
         // A bordered panel behind the rows so the search-bus stub lines visibly terminate on the
-        // table instead of floating in empty space. "page-table-inline" scales it up to read as the
+        // table instead of floating in empty space. "data-table-schematic" scales it up to read as the
         // same size as the MMU tab's own PageTableView (see light-theme.css).
-        rowsBox.getStyleClass().addAll("tlb-table", "page-table-inline");
+        rowsBox.getStyleClass().addAll("tlb-table", "data-table-schematic");
         rowsBody.getStyleClass().add("tlb-table-rows");
         rowsBody.getChildren().addAll(rows);
         rowsBox.getChildren().addAll(header, rowsBody);
@@ -71,12 +75,11 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
         addressAnchor.set(busAnchor);
         tableBottomAnchor.set(bottomAnchor);
 
-        Runnable reposition = () -> Platform.runLater(this::repositionLines);
-        sceneProperty().addListener((obs, oldVal, newVal) -> reposition.run());
-        widthProperty().addListener((obs, oldVal, newVal) -> reposition.run());
-        heightProperty().addListener((obs, oldVal, newVal) -> reposition.run());
+        sceneProperty().addListener((obs, oldVal, newVal) -> reposition.request());
+        widthProperty().addListener((obs, oldVal, newVal) -> reposition.request());
+        heightProperty().addListener((obs, oldVal, newVal) -> reposition.request());
         for (TLBRowView row : rows)
-            row.visibleProperty().addListener((obs, oldVal, newVal) -> reposition.run());
+            row.visibleProperty().addListener((obs, oldVal, newVal) -> reposition.request());
 
         active.addListener((obs, oldVal, newVal) -> {
             busLine.pseudoClassStateChanged(ACTIVE, newVal);
@@ -89,7 +92,7 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
         });
         setFogged(!active.get());
 
-        reposition.run();
+        reposition.request();
     }
 
     @Override
@@ -110,6 +113,11 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
     @Override
     public BooleanProperty activeProperty() {
         return active;
+    }
+
+    @Override
+    public void syncAnchors() {
+        reposition.runNow();
     }
 
     private void repositionLines() {
@@ -186,7 +194,7 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
     // Blur + dim the rows until the TLB has actually been consulted for the current instruction,
     // matching the page table's "not yet accessed" treatment.
     private void setFogged(boolean fogged) {
-        rowsBody.setEffect(fogged ? new BoxBlur(6, 6, 3) : null);
+        rowsBody.setEffect(fogged ? new BoxBlur(UiScale.px(6), UiScale.px(6), 3) : null);
         rowsBody.setOpacity(fogged ? 0.45 : 1.0);
     }
 
@@ -201,7 +209,7 @@ public class AssociativeTLBView extends StackPane implements TLBBodyView
         // Unmanaged so the hand-positioned bus/stub geometry (which reaches left of the rows, into
         // negative overlay coords) never inflates the overlay's bounds and shoves the rows around.
         line.setManaged(false);
-        line.getStyleClass().add("tlb-search-line");
+        line.getStyleClass().add("connector-line");
         return line;
     }
 }

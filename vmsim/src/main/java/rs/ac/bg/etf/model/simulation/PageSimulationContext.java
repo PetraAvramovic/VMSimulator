@@ -39,6 +39,7 @@ public class PageSimulationContext extends SimulationContext
     private long pageEvictionInvalidatedTlbTag = -1;
     private long pageEvictionInvalidatedTlbBlock = -1;
     private boolean pageEvictionInvalidatedTlbWasDirty = false;
+    private int pageEvictionInvalidatedTlbIndex = -1;
 
     // Identity of whichever evicted entry's descriptor PageTLBUpdateStep's dirty write-back most
     // recently targeted, set in its execute(), read by consumers (e.g. the MMU tab's notification
@@ -241,12 +242,13 @@ public class PageSimulationContext extends SimulationContext
         return pageEvictionVictimFrame;
     }
 
-    public void setPageEvictionInvalidatedTlbEntry(boolean invalidated, long tag, long block, boolean wasDirty)
+    public void setPageEvictionInvalidatedTlbEntry(boolean invalidated, long tag, long block, boolean wasDirty, int index)
     {
         this.pageEvictionInvalidatedTlbEntry = invalidated;
         this.pageEvictionInvalidatedTlbTag = tag;
         this.pageEvictionInvalidatedTlbBlock = block;
         this.pageEvictionInvalidatedTlbWasDirty = wasDirty;
+        this.pageEvictionInvalidatedTlbIndex = index;
     }
 
     public boolean didPageEvictionInvalidateTlbEntry()
@@ -262,6 +264,12 @@ public class PageSimulationContext extends SimulationContext
     public long getPageEvictionInvalidatedTlbBlock()
     {
         return pageEvictionInvalidatedTlbBlock;
+    }
+
+    /** The TLB slot the invalidated entry occupied, or -1 if it wasn't cached there. */
+    public int getPageEvictionInvalidatedTlbIndex()
+    {
+        return pageEvictionInvalidatedTlbIndex;
     }
 
     public boolean wasPageEvictionInvalidatedTlbDirty()

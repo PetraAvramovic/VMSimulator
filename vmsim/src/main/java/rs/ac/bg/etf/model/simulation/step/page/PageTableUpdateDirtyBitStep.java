@@ -35,7 +35,8 @@ public class PageTableUpdateDirtyBitStep<T extends PageSimulationContext> extend
     @Override
     public StepDescription getStepDescription()
     {
-        return new StepDescription(StepDescriptionKey.PAGE_TABLE_DIRTY_BIT_UPDATED, descriptor.getPage());
+        return new StepDescription(StepDescriptionKey.PAGE_TABLE_DIRTY_BIT_UPDATED,
+                descriptor.getPage(), context.getCurrentInstruction().getUser());
     }
 
 }

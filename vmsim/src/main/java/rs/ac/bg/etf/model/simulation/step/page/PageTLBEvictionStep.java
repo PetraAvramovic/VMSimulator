@@ -12,6 +12,8 @@ public class PageTLBEvictionStep<T extends PageSimulationContext> extends TLBEvi
     private PageTableDescriptor descriptor;
     private PageTableDescriptor evictedDescriptor;
     private boolean descriptorWasDirty = false;
+    private int writebackUser = -1;
+    private long writebackPage = -1;
 
     public PageTLBEvictionStep(T context, PageTableDescriptor descriptor)
     {
@@ -36,7 +38,21 @@ public class PageTLBEvictionStep<T extends PageSimulationContext> extends TLBEvi
         descriptorWasDirty = evictedDescriptor.isDirty();
         evictedDescriptor.setDirty(true);
 
-        context.setTlbWritebackVictim(evictedMapping.user(), evictedMapping.page());
+        writebackUser = evictedMapping.user();
+        writebackPage = evictedMapping.page();
+        context.setTlbWritebackVictim(writebackUser, writebackPage);
+    }
+
+    @Override
+    public int getWritebackUser()
+    {
+        return writebackUser;
+    }
+
+    @Override
+    public long getWritebackPage()
+    {
+        return writebackPage;
     }
 
     @Override

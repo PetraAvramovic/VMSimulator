@@ -1,6 +1,5 @@
 package rs.ac.bg.etf.view;
 
-import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
@@ -10,9 +9,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
-import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Polyline;
 import rs.ac.bg.etf.view.inspector.DiskBlockInspectorWindow;
@@ -20,6 +17,9 @@ import rs.ac.bg.etf.view.os.FrameTableView;
 import rs.ac.bg.etf.view.os.ReplacementQueueView;
 import rs.ac.bg.etf.view.os.UserSummaryView;
 import rs.ac.bg.etf.view.util.FieldBoxes;
+import rs.ac.bg.etf.view.util.PostLayoutTask;
+import rs.ac.bg.etf.view.util.SchematicTab;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel;
 import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel.OsLine;
 
@@ -29,29 +29,33 @@ import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel.OsLine;
  * fault (two lit wires + a click-through block popup), the FIFO replacement queue, and a
  * per-user page-table summary. Rebuilt on every step by {@link PagedOSTabViewModel}.
  */
-public class PagedOSTabView extends StackPane
+public class PagedOSTabView extends SchematicTab
 {
-    private static final double CANVAS_WIDTH = 880;
-    private static final double CANVAS_HEIGHT = 480;
-    private static final double MARGIN = 30;
-    private static final double TABLE_Y = 72;
-    private static final double TABLE_X = MARGIN;
+    // Starting estimate only; the real design height is the stacked sections' bottom edge (see relayout below).
+    private final double CANVAS_HEIGHT = UiScale.px(480);
+    private final double MARGIN = UiScale.px(30);
+    private final double TABLE_Y = UiScale.px(72);
+    private final double TABLE_X = MARGIN;
     /** Initial gap between the frame table and the right-hand column (before responsive layout). */
-    private static final double COLUMN_GAP = 200;
+    private final double COLUMN_GAP = UiScale.px(200);
     /** Minimum table-to-disk-box gap, so the wire captions always fit. */
-    private static final double WIRE_GAP = 200;
+    private final double WIRE_GAP = UiScale.px(200);
+    // Gap between a section's caption and the panel it heads.
+    private final double SECTION_LABEL_GAP = UiScale.px(26);
+    // The load / write-back wires run in two lanes this far either side of the row's / disk's centre;
+    // their arrowheads are ARROW_LENGTH long and 2 * ARROW_HALF_WIDTH across.
+    private final double LANE_OFFSET = UiScale.px(7);
+    private final double ARROW_LENGTH = UiScale.px(9);
+    private final double ARROW_HALF_WIDTH = UiScale.px(5);
 
     private static final javafx.css.PseudoClass ACTIVE = javafx.css.PseudoClass.getPseudoClass("active");
 
-    private final Pane canvas = new Pane();
-
     public PagedOSTabView(PagedOSTabViewModel viewModel)
     {
-        getStyleClass().add("os-tab-container");
-        canvas.setPrefSize(CANVAS_WIDTH, CANVAS_HEIGHT);
+        canvas.designHeightProperty().set(CANVAS_HEIGHT);
 
         // ---- Frame table (scrollable; swatch column is the occupancy strip) ---------
-        Label memHeader = FieldBoxes.sectionLabel("Frame table", TABLE_X, TABLE_Y - 26);
+        Label memHeader = FieldBoxes.sectionLabel("Frame table", TABLE_X, TABLE_Y - SECTION_LABEL_GAP);
 
         FrameTableView table = new FrameTableView(viewModel);
         table.setLayoutX(TABLE_X);
@@ -68,10 +72,10 @@ public class PagedOSTabView extends StackPane
         // "Disk" sits above the card, left-aligned, the same treatment "Frame table" and
         // "Eviction policy (FIFO)" get for their own panels below -- not stacked inside the card
         // itself, which read as part of the card's own data rather than a heading for it.
-        Label diskHeader = FieldBoxes.sectionLabel("Disk", rightX, TABLE_Y - 26);
+        Label diskHeader = FieldBoxes.sectionLabel("Disk", rightX, TABLE_Y - SECTION_LABEL_GAP);
 
         Label addressTitle = new Label("Address");
-        addressTitle.getStyleClass().add("va-breakdown-title");
+        addressTitle.getStyleClass().add("field-box-title");
 
         // Plain value text, not a bordered cell nested inside the disk card -- a box-within-a-box
         // read as if the address had some separate identity from the disk itself. The card's own
@@ -80,17 +84,17 @@ public class PagedOSTabView extends StackPane
         // sidebar.
         int diskDigits = Math.max(1, viewModel.diskHexDigitsProperty().get());
         Label diskAddressValue = new Label();
-        diskAddressValue.getStyleClass().add("va-breakdown-value");
-        diskAddressValue.setFont(FieldBoxes.FIELD_FONT);
+        diskAddressValue.getStyleClass().add("field-box-value");
+        diskAddressValue.setFont(FieldBoxes.fieldFont());
         diskAddressValue.textProperty().bind(viewModel.diskAddressHexProperty());
 
-        VBox diskBox = new VBox(6, addressTitle, diskAddressValue);
+        VBox diskBox = new VBox(UiScale.px(6), addressTitle, diskAddressValue);
         diskBox.getStyleClass().add("os-disk-box");
         diskBox.setAlignment(Pos.CENTER);
         // Sized to the address value alone (measured the same way FieldBoxes' own boxes are, so a
         // wide 8-hex-digit address never clips).
-        double addrTextW = textWidth("0x" + "F".repeat(diskDigits), FieldBoxes.FIELD_FONT);
-        double diskBoxW = addrTextW + 32;
+        double addrTextW = textWidth("0x" + "F".repeat(diskDigits), FieldBoxes.fieldFont());
+        double diskBoxW = addrTextW + UiScale.px(32);
         diskBox.setPrefWidth(diskBoxW);
         diskBox.setMinWidth(diskBoxW);
         diskBox.setLayoutY(TABLE_Y);
@@ -133,12 +137,12 @@ public class PagedOSTabView extends StackPane
         DoubleProperty writeStackBaseY = new SimpleDoubleProperty();
         bindCenteredX(loadCaption, loadStackX);
         bindCenteredX(loadValue, loadStackX);
-        loadCaption.layoutYProperty().bind(loadStackBaseY.subtract(45));
-        loadValue.layoutYProperty().bind(loadStackBaseY.subtract(29));
+        loadCaption.layoutYProperty().bind(loadStackBaseY.subtract(UiScale.px(45)));
+        loadValue.layoutYProperty().bind(loadStackBaseY.subtract(UiScale.px(29)));
         bindCenteredX(writeCaption, writeStackX);
         bindCenteredX(writeValue, writeStackX);
-        writeCaption.layoutYProperty().bind(writeStackBaseY.add(13));
-        writeValue.layoutYProperty().bind(writeStackBaseY.add(29));
+        writeCaption.layoutYProperty().bind(writeStackBaseY.add(UiScale.px(13)));
+        writeValue.layoutYProperty().bind(writeStackBaseY.add(UiScale.px(29)));
 
         bindVisible(viewModel.lineActiveProperty(OsLine.LOAD_PAGE), loadWire, loadArrow, loadCaption, loadValue);
         bindVisible(viewModel.lineActiveProperty(OsLine.WRITE_BACK), writeWire, writeArrow, writeCaption, writeValue);
@@ -159,7 +163,7 @@ public class PagedOSTabView extends StackPane
         ReplacementQueueView fifo = new ReplacementQueueView(viewModel);
 
         Label nextVictimLabel = new Label();
-        nextVictimLabel.getStyleClass().add("os-disk-summary");
+        nextVictimLabel.getStyleClass().add("status-caption");
         nextVictimLabel.textProperty().bind(viewModel.nextVictimHexProperty()
                 .map(hex -> "/".equals(hex) ? "" : "next victim: frame " + hex));
 
@@ -174,12 +178,11 @@ public class PagedOSTabView extends StackPane
         // The disk box is the only thing left in the right-hand column, so it alone drives both
         // the binding and the floor below -- flush against the tab's real right edge, exactly like
         // PagedMMUTabView/PagedTLBTabView bind their own Physical Address box, instead of
-        // recomputing setLayoutX imperatively on every relayout pass. canvas.setMinWidth is the
-        // floor that guarantees room for the table + wire captions + disk box even when the
-        // viewport is narrower than that (the ScrollPane scrolls horizontally past it, same as
-        // MIN_CANVAS_WIDTH does on the other schematic tabs).
+        // recomputing setLayoutX imperatively on every relayout pass. The design width is the
+        // floor that guarantees room for the table + wire captions + disk box: a viewport narrower
+        // than that is handled by the workbench scaling the whole tab down, not by squeezing it.
         double tableRight = TABLE_X + table.panelWidth();
-        canvas.setMinWidth(tableRight + WIRE_GAP + diskBoxW + MARGIN);
+        canvas.designWidthProperty().set(tableRight + WIRE_GAP + diskBoxW + MARGIN);
         var colX = canvas.widthProperty().subtract(MARGIN).subtract(diskBoxW);
         diskHeader.layoutXProperty().bind(colX);
         diskBox.layoutXProperty().bind(colX);
@@ -190,13 +193,9 @@ public class PagedOSTabView extends StackPane
                 writeWire, writeArrow, writeCaption, writeValue,
                 fifoHeader, fifo, nextVictimLabel, summary);
 
-        ScrollPane scrollPane = new ScrollPane(canvas);
-        scrollPane.getStyleClass().addAll("mmu-scroll-pane", "slim-scroll");
-        // Grows canvas to fill the viewport's real width when it's wider than canvas's own
-        // minWidth (never narrower -- that floor still applies below it) -- matches
-        // PagedMMUTabView/PagedTLBTabView's own ScrollPane treatment exactly.
-        scrollPane.setFitToWidth(true);
-        getChildren().add(scrollPane);
+        // Grows the canvas to fill the viewport (never below its design size) -- matches
+        // PagedMMUTabView/PagedTLBTabView.
+        ScrollPane scrollPane = mountCanvas();
 
         Runnable updateWires = () -> updateWires(
                 table, diskBox,
@@ -204,37 +203,47 @@ public class PagedOSTabView extends StackPane
                 writeWire, writeArrow, writeCaption, writeValue,
                 loadStackX, loadStackBaseY, writeStackX, writeStackBaseY);
 
+        // Both jobs run once per pulse, right after layout (see PostLayoutTask), so the wires and the
+        // stacked sections are drawn together with the boxes rather than a frame behind them.
+        PostLayoutTask rewire = new PostLayoutTask(this, updateWires);
+
         // Vertical stacking still has to happen imperatively (each section's Y depends on the
         // real, dynamically-changing height of the one above it), so it stays a recomputed
         // Runnable; only the canvas's own height (to fill a tall viewport) is derived alongside it.
         Runnable relayout = () -> {
-            double y = table.getLayoutY() + tableHeight + 30;
+            double y = table.getLayoutY() + tableHeight + UiScale.px(30);
             fifoHeader.setLayoutY(y);
-            y += 22;
+            y += UiScale.px(22);
             fifo.setLayoutY(y);
-            y += Math.max(fifo.getLayoutBounds().getHeight(), 26) + 8;
+            y += Math.max(fifo.getLayoutBounds().getHeight(), UiScale.px(26)) + UiScale.px(8);
             nextVictimLabel.setLayoutY(y);
-            y += 26;
+            y += UiScale.px(26);
             summary.setLayoutY(y);
 
             // layoutBounds, not boundsInParent: effect-immune, so the disk box's :hover drop-shadow
             // never affects the computed content height.
             double contentBottom = Math.max(diskBox.getLayoutY() + diskBox.getLayoutBounds().getHeight(),
                     summary.getLayoutY() + summary.getLayoutBounds().getHeight());
-            canvas.setPrefHeight(Math.max(scrollPane.getViewportBounds() != null
-                    ? scrollPane.getViewportBounds().getHeight() : CANVAS_HEIGHT, contentBottom + MARGIN));
-            updateWires.run();
+            // Content only, never the viewport: the scroll pane already stretches the canvas to fill
+            // a taller viewport, and tying this to the viewport would loop through the workbench's
+            // scale-to-fit (which reads this as the tab's minimum height).
+            canvas.designHeightProperty().set(contentBottom + MARGIN);
+            // Now, and not left to its own pending request: it would only redo this.
+            rewire.runNow();
         };
+        PostLayoutTask restack = new PostLayoutTask(this, relayout);
 
         // layoutBounds, not boundsInParent: only a real size change (content, not a hover effect)
         // should trigger a relayout.
-        table.activeRowAnchorProperty().addListener((o, ov, nv) -> Platform.runLater(updateWires));
-        diskBox.layoutBoundsProperty().addListener((o, ov, nv) -> Platform.runLater(relayout));
-        fifo.layoutBoundsProperty().addListener((o, ov, nv) -> Platform.runLater(relayout));
-        summary.layoutBoundsProperty().addListener((o, ov, nv) -> Platform.runLater(relayout));
-        scrollPane.viewportBoundsProperty().addListener((o, ov, nv) -> Platform.runLater(relayout));
-        sceneProperty().addListener((o, ov, nv) -> Platform.runLater(relayout));
-        Platform.runLater(relayout);
+        table.activeRowAnchorProperty().addListener((o, ov, nv) -> rewire.request());
+        diskBox.layoutBoundsProperty().addListener((o, ov, nv) -> restack.request());
+        fifo.layoutBoundsProperty().addListener((o, ov, nv) -> restack.request());
+        summary.layoutBoundsProperty().addListener((o, ov, nv) -> restack.request());
+        scrollPane.viewportBoundsProperty().addListener((o, ov, nv) -> restack.request());
+        // The disk box (and so both wires' far end) rides the canvas's live right edge.
+        canvas.widthProperty().addListener((o, ov, nv) -> restack.request());
+        sceneProperty().addListener((o, ov, nv) -> restack.request());
+        restack.request();
     }
 
     private void updateWires(
@@ -266,11 +275,15 @@ public class PagedOSTabView extends StackPane
         double loadKneeX = rowX + span * 0.34;
         double writeKneeX = rowX + span * 0.66;
 
-        loadWire.getPoints().setAll(diskX, diskY - 7, loadKneeX, diskY - 7, loadKneeX, rowY - 7, rowX, rowY - 7);
-        loadArrow.getPoints().setAll(rowX + 9, rowY - 12, rowX, rowY - 7, rowX + 9, rowY - 2);
+        loadWire.getPoints().setAll(diskX, diskY - LANE_OFFSET, loadKneeX, diskY - LANE_OFFSET,
+                loadKneeX, rowY - LANE_OFFSET, rowX, rowY - LANE_OFFSET);
+        loadArrow.getPoints().setAll(rowX + ARROW_LENGTH, rowY - LANE_OFFSET - ARROW_HALF_WIDTH,
+                rowX, rowY - LANE_OFFSET, rowX + ARROW_LENGTH, rowY - LANE_OFFSET + ARROW_HALF_WIDTH);
 
-        writeWire.getPoints().setAll(rowX, rowY + 7, writeKneeX, rowY + 7, writeKneeX, diskY + 7, diskX, diskY + 7);
-        writeArrow.getPoints().setAll(diskX - 9, diskY + 2, diskX, diskY + 7, diskX - 9, diskY + 12);
+        writeWire.getPoints().setAll(rowX, rowY + LANE_OFFSET, writeKneeX, rowY + LANE_OFFSET,
+                writeKneeX, diskY + LANE_OFFSET, diskX, diskY + LANE_OFFSET);
+        writeArrow.getPoints().setAll(diskX - ARROW_LENGTH, diskY + LANE_OFFSET - ARROW_HALF_WIDTH,
+                diskX, diskY + LANE_OFFSET, diskX - ARROW_LENGTH, diskY + LANE_OFFSET + ARROW_HALF_WIDTH);
 
         // load caption + value stack, centred on the run near the disk box, fully above it.
         // write caption + value stack, centred on the run near the table, fully below it. Only the
@@ -281,8 +294,7 @@ public class PagedOSTabView extends StackPane
         writeStackX.set((rowX + writeKneeX) / 2);
         writeStackBaseY.set(rowY);
 
-        for (Node n : new Node[] { loadWire, loadArrow, loadCaption, loadValue, writeWire, writeArrow, writeCaption, writeValue })
-            n.toFront();
+        canvas.bringToFront(loadWire, loadArrow, loadCaption, loadValue, writeWire, writeArrow, writeCaption, writeValue);
     }
 
     // Keeps a label centred on a live target X as a standing binding, driven by the label's own
@@ -323,7 +335,7 @@ public class PagedOSTabView extends StackPane
     {
         Label label = new Label();
         label.textProperty().bind(value);
-        label.getStyleClass().add("mmu-bit-value");
+        label.getStyleClass().add("wire-value-label");
         return label;
     }
 

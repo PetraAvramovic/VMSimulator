@@ -10,6 +10,7 @@ import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
+import rs.ac.bg.etf.view.util.UiScale;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel;
 import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel.QueueChip;
@@ -26,7 +27,7 @@ public class ReplacementQueueView extends HBox
 {
     /** Entries kept visible at each end before the strip condenses the middle into "...". */
     private static final int MAX_ENDS = 2;
-    private static final double SLOT_GAP = 6;
+    private final double SLOT_GAP = UiScale.px(6);
 
     private final PagedOSTabViewModel viewModel;
     private final Label emptyLabel = new Label("replacement queue empty");
@@ -36,12 +37,12 @@ public class ReplacementQueueView extends HBox
     {
         this.viewModel = viewModel;
         this.inspector = new ReplacementQueueInspectorWindow(viewModel);
-        getStyleClass().add("os-fifo-queue");
+        getStyleClass().add("replacement-queue");
         setAlignment(Pos.BOTTOM_LEFT);
         setSpacing(SLOT_GAP);
         setCursor(Cursor.HAND);
         setOnMouseClicked(e -> inspector.toggle(getScene() != null ? getScene().getWindow() : null));
-        emptyLabel.getStyleClass().add("mmu-bit-width");
+        emptyLabel.getStyleClass().add("bit-width-label");
 
         viewModel.getReplacementOrder().addListener((ListChangeListener<QueueChip>) c -> rebuild());
         viewModel.memoryFullProperty().addListener((o, ov, nv) -> rebuild());
@@ -66,7 +67,7 @@ public class ReplacementQueueView extends HBox
         for (QueueChip chip : visible)
         {
             Node slot = chip == null
-                    ? slotLabel("...", "os-fifo-ellipsis")
+                    ? slotLabel("...", "replacement-queue-ellipsis")
                     : chipSlot(chip, digits, memoryFull);
             getChildren().add(withCaption(slot, chip));
         }
@@ -95,14 +96,14 @@ public class ReplacementQueueView extends HBox
         // its "TAIL" caption already marks it, and it isn't a distinguished state the way an
         // imminent eviction is.
         if (chip.head() && memoryFull)
-            label.getStyleClass().add("os-fifo-slot-head");
+            label.getStyleClass().add("replacement-queue-slot-head");
         return label;
     }
 
     private Label slotLabel(String text, String extraStyleClass)
     {
         Label label = new Label(text);
-        label.getStyleClass().add("os-fifo-slot");
+        label.getStyleClass().add("replacement-queue-slot");
         if (extraStyleClass != null)
             label.getStyleClass().add(extraStyleClass);
         return label;
@@ -113,8 +114,8 @@ public class ReplacementQueueView extends HBox
     private Node withCaption(Node slot, QueueChip chip)
     {
         Label caption = new Label(captionFor(chip));
-        caption.getStyleClass().add("os-fifo-caption");
-        VBox column = new VBox(2, caption, slot);
+        caption.getStyleClass().add("replacement-queue-caption");
+        VBox column = new VBox(UiScale.px(2), caption, slot);
         column.setAlignment(Pos.BOTTOM_CENTER);
         return column;
     }

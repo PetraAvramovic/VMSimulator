@@ -25,7 +25,9 @@ public abstract class FormPhysicalAddressFromTLBStep<T extends SimulationContext
     @Override
     public StepDescription getStepDescription()
     {
+        // The block comes from the TLB entry, the word straight from the virtual address.
         return new StepDescription(StepDescriptionKey.PHYSICAL_ADDRESS_FROM_TLB,
-                context.getCurrentPhysicalAddress(), entry.getBlock());
+                context.getCurrentPhysicalAddress(), entry.getBlock(), describeTlbEntry(entry),
+                context.getWordComponent());
     }
 }

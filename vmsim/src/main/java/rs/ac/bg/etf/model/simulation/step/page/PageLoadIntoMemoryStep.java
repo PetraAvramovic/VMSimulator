@@ -20,11 +20,12 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
     private SortedMap<Long, Long> previousBlock;
 
     // Captured at execute() time: undo() / getStepDescription() must NOT re-read
-    // context.getCurrentDescriptor(), which is mutable and gets nulled by an earlier
-    // instruction's PageFaultStep.undo() during a multi-instruction rewind.
+    // context.getCurrentDescriptor(), which is shared scratch state: another instruction's
+    // PageFaultStep replaces it, and only gives the old value back when that step is undone.
     private PageTableDescriptor descriptor;
     private int user;
     private long page;
+    private long diskAddress;
 
     public PageLoadIntoMemoryStep(T context, long frame)
     {
@@ -40,7 +41,7 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
         Memory memory = context.getMemory();
         descriptor = context.getCurrentDescriptor();
 
-        long diskAddress = descriptor.getDisk();
+        diskAddress = descriptor.getDisk();
         SortedMap<Long, Long> block = disk.readBlock(diskAddress);
 
         long memoryAddress = frame << context.getWordBits();
@@ -81,7 +82,8 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
     @Override
     public StepDescription getStepDescription()
     {
-        return new StepDescription(StepDescriptionKey.PAGE_LOADED_INTO_MEMORY, page, frame);
+        // The disk address is the Disk field of the page's page table entry.
+        return new StepDescription(StepDescriptionKey.PAGE_LOADED_INTO_MEMORY, page, user, diskAddress, frame);
     }
 
 }

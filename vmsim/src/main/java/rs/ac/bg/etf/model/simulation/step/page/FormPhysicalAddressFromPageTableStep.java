@@ -11,6 +11,8 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
 {
     private PageTableDescriptor descriptor;
     private long previousPhysicalAddress;
+    // Whose page table the block was read from, captured in execute() for the description.
+    private int user;
 
     protected FormPhysicalAddressFromPageTableStep(T context, PageTableDescriptor descriptor) 
     {
@@ -26,6 +28,7 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
         long physicalAddress = (block << wordBits) | word;
 
         previousPhysicalAddress = context.getCurrentPhysicalAddress();
+        user = context.getCurrentInstruction().getUser();
 
         context.setCurrentPhysicalAddress(physicalAddress);
         context.getCurrentInstruction().setPhysicalAddress(physicalAddress);
@@ -43,8 +46,10 @@ public class FormPhysicalAddressFromPageTableStep<T extends PageSimulationContex
     @Override
     public StepDescription getStepDescription()
     {
+        // The block comes from the page table entry, the word straight from the virtual address.
         return new StepDescription(StepDescriptionKey.PHYSICAL_ADDRESS_FROM_PAGE_TABLE,
-                context.getCurrentPhysicalAddress(), descriptor.getBlock());
+                context.getCurrentPhysicalAddress(), descriptor.getBlock(), descriptor.getPage(), user,
+                context.getWordComponent());
     }
     
 }

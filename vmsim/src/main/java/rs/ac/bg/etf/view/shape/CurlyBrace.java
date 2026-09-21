@@ -8,6 +8,7 @@ import javafx.beans.property.SimpleDoubleProperty;
 import javafx.scene.shape.MoveTo;
 import javafx.scene.shape.QuadCurveTo;
 import javafx.scene.shape.Path;
+import rs.ac.bg.etf.view.util.UiScale;
 
 /**
  * A schematic curly brace ("}") that visually combines two incoming wires (its left/right ends) into a
@@ -19,12 +20,14 @@ import javafx.scene.shape.Path;
 public class CurlyBrace extends Path {
     /** Fraction of the depth reached at the two ends, before the mid-sections sweep to full depth. */
     private static final double END_CURVE_FRACTION = 0.5;
+    /** Design-size default depth; scaled to the UI scale the brace is built at. */
+    private static final double DEFAULT_DEPTH = 12;
 
     private final DoubleProperty leftX = new SimpleDoubleProperty();
     private final DoubleProperty leftY = new SimpleDoubleProperty();
     private final DoubleProperty rightX = new SimpleDoubleProperty();
     private final DoubleProperty rightY = new SimpleDoubleProperty();
-    private final DoubleProperty depth = new SimpleDoubleProperty(12);
+    private final DoubleProperty depth = new SimpleDoubleProperty(UiScale.px(DEFAULT_DEPTH));
 
     private final ReadOnlyDoubleWrapper tipX = new ReadOnlyDoubleWrapper();
     private final ReadOnlyDoubleWrapper tipY = new ReadOnlyDoubleWrapper();

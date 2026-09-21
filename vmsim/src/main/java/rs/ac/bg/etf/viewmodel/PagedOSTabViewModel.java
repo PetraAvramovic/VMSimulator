@@ -4,6 +4,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import javafx.beans.value.ChangeListener;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.LongProperty;
@@ -39,6 +40,10 @@ import rs.ac.bg.etf.view.util.ValueConverter;
  */
 public class PagedOSTabViewModel
 {
+    // Named so dispose() can detach it: the view that owns this view model is rebuilt whenever the UI
+    // scale changes (see UiScale), while the simulation view model it listens to lives on.
+    private final ChangeListener<Number> stepListener = (obs, oldVal, newVal) -> refresh();
+
     /** Connector wires drawn on the OS schematic. */
     public enum OsLine
     {
@@ -136,7 +141,7 @@ public class PagedOSTabViewModel
         diskHexDigits.set(ValueConverter.hexDigitsFor(diskBits));
         ptpHexDigits.set(ValueConverter.hexDigitsFor(physicalAddressBits));
 
-        simulationViewModel.currentStepNumberProperty().addListener((obs, oldVal, newVal) -> refresh());
+        currentStepNumber.addListener(stepListener);
         refresh();
     }
 
@@ -238,7 +243,10 @@ public class PagedOSTabViewModel
 
         long activeFrame = -1;
         long evictingFrame = -1;
-        if (lastFrameStep instanceof PageLoadIntoMemoryStep<?>)
+        // A fault that found a free frame writes it to the same context field the load step does
+        // (context.getCurrentFrame()), so the row is already highlighted "active" on the fault step
+        // itself, before the load runs -- not just once loading starts.
+        if (lastFrameStep instanceof PageLoadIntoMemoryStep<?> || lastFrameStep instanceof PageFaultStep<?>)
         {
             activeFrame = context.getCurrentFrame();
         }
@@ -378,7 +386,8 @@ public class PagedOSTabViewModel
                 return null;
             if (step instanceof PageLoadIntoMemoryStep
                     || step instanceof PageStoreToDiskStep
-                    || step instanceof PageEvictionStep)
+                    || step instanceof PageEvictionStep
+                    || step instanceof PageFaultStep)
                 return step;
         }
         return null;
@@ -417,5 +426,11 @@ public class PagedOSTabViewModel
     private static String toHex(long value, int digits)
     {
         return "0x" + String.format("%0" + digits + "X", value);
+    }
+
+    /** Stops following the simulation -- call when the view using this view model is discarded. */
+    public void dispose()
+    {
+        currentStepNumber.removeListener(stepListener);
     }
 }

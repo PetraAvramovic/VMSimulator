@@ -1,5 +1,6 @@
 package rs.ac.bg.etf.view.os;
 
+import rs.ac.bg.etf.view.util.UiScale;
 import java.util.List;
 
 import javafx.collections.ListChangeListener;
@@ -12,6 +13,7 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
+import rs.ac.bg.etf.view.util.InspectorWindows;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.view.util.WindowedRowSource;
@@ -32,6 +34,7 @@ import rs.ac.bg.etf.viewmodel.PagedOSTabViewModel.QueueChip;
  */
 public class ReplacementQueueInspectorWindow
 {
+    // Design-size; scaled where it is used, inside build() (see InspectorWindows for the scale).
     private static final double ROOT_PADDING = 12;
 
     private final PagedOSTabViewModel viewModel;
@@ -60,7 +63,7 @@ public class ReplacementQueueInspectorWindow
             return;
         }
         if (stage == null)
-            stage = build(owner);
+            stage = InspectorWindows.build(() -> build(owner));
         stage.show();
         stage.toFront();
     }
@@ -73,8 +76,9 @@ public class ReplacementQueueInspectorWindow
         tableView.setRowSource(queueSource());
         VBox.setVgrow(tableView, Priority.ALWAYS);
 
+        double rootPadding = UiScale.px(ROOT_PADDING);
         VBox root = new VBox(tableView);
-        root.setPadding(new Insets(ROOT_PADDING));
+        root.setPadding(new Insets(rootPadding));
 
         Stage s = new Stage();
         s.initModality(Modality.NONE);
@@ -82,12 +86,12 @@ public class ReplacementQueueInspectorWindow
             s.initOwner(owner);
         s.setTitle("Replacement Queue Inspector");
 
-        Scene scene = new Scene(root, 300, 360);
-        scene.getStylesheets().add(getClass().getResource("/rs/ac/bg/etf/light-theme.css").toExternalForm());
+        Scene scene = new Scene(root, UiScale.px(300), UiScale.px(360));
+        UiScale.applyTheme(scene);
         s.setScene(scene);
 
-        s.setMinWidth(tableView.minimumWidth() + 2 * ROOT_PADDING);
-        s.setMinHeight(tableView.minimumHeight() + 2 * ROOT_PADDING);
+        s.setMinWidth(tableView.minimumWidth() + 2 * rootPadding);
+        s.setMinHeight(tableView.minimumHeight() + 2 * rootPadding);
 
         return s;
     }
@@ -104,13 +108,13 @@ public class ReplacementQueueInspectorWindow
     }
 
     // Only the head row is ever tinted, and only while it's actually the imminent victim (memory
-    // full) -- the same os-fifo-slot-head convention the strip itself uses, rather than always
+    // full) -- the same replacement-queue-slot-head convention the strip itself uses, rather than always
     // flagging the oldest resident as if an eviction were already about to happen. The tail carries
     // no background tint (just its "TAIL" position label): it isn't a distinguished state the way
     // an imminent eviction is.
     private String headStyleClass(QueueChip chip)
     {
-        return chip.head() && viewModel.memoryFullProperty().get() ? "os-fifo-row-head" : null;
+        return chip.head() && viewModel.memoryFullProperty().get() ? "replacement-queue-row-head" : null;
     }
 
     private WindowedRowSource<QueueChip> queueSource()

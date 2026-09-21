@@ -36,8 +36,11 @@ public class FormPageTableAddressStep<T extends PageSimulationContext> extends S
     @Override
     public StepDescription getStepDescription()
     {
+        // Address = the user's page table pointer + an offset that is the page number times the size of
+        // one entry (the page number shifted left by log2 of it).
         return new StepDescription(StepDescriptionKey.PAGE_TABLE_ADDRESS_FORMED,
-                context.getCurrentDescriptorAddress(), context.getCurrentPTP(), context.getCurrentDescriptorOffset());
+                context.getCurrentDescriptorAddress(), context.getCurrentInstruction().getUser(),
+                context.getCurrentPTP(), context.getCurrentDescriptorOffset());
     }
 
 }

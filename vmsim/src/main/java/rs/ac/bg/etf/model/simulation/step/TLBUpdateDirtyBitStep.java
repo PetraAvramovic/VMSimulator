@@ -34,7 +34,7 @@ public abstract class TLBUpdateDirtyBitStep<T extends SimulationContext> extends
     @Override
     public StepDescription getStepDescription()
     {
-        return new StepDescription(StepDescriptionKey.TLB_DIRTY_BIT_UPDATED);
+        return new StepDescription(StepDescriptionKey.TLB_DIRTY_BIT_UPDATED, describeTlbEntry(tlbEntry));
     }
 
     

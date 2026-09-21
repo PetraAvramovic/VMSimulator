@@ -39,10 +39,11 @@ import javafx.util.converter.IntegerStringConverter;
 import javafx.util.converter.LongStringConverter;
 
 import rs.ac.bg.etf.view.util.HexLongConverter;
+import rs.ac.bg.etf.view.util.UiScale;
 
 /**
  * Shared chrome for the config screen's bulk-data editor windows (Instructions, Page Table
- * Entries, Initial Memory Content): a title, a description, an "Add Row" button, a live row count,
+ * Entries, Initial Page Content): a title, a description, an "Add Row" button, a live row count,
  * and a hand-rolled header/rows table built from HBox/VBox/Label -- deliberately mirroring
  * {@code WindowedTableView.headerCell()}/{@code RowNode} (the app's other, already-correctly-
  * aligned hand-rolled table) node-for-node: a header cell and a row's cell for the same column are
@@ -102,15 +103,15 @@ final class ConfigEditorWindowSupport
             Supplier<T> newRowFactory,
             boolean reorderable)
     {
-        HBox headerRow = new HBox(COLUMN_SPACING);
+        HBox headerRow = new HBox(UiScale.px(COLUMN_SPACING));
         headerRow.getStyleClass().add("config-editor-header-row");
         headerRow.setAlignment(Pos.CENTER_LEFT);
-        headerRow.setPrefHeight(ROW_HEIGHT);
+        headerRow.setPrefHeight(UiScale.px(ROW_HEIGHT));
         if (reorderable)
-            headerRow.getChildren().add(fixedWidthSpacer(DRAG_HANDLE_WIDTH));
+            headerRow.getChildren().add(fixedWidthSpacer(UiScale.px(DRAG_HANDLE_WIDTH)));
         for (EditorColumn<T> column : columns)
             headerRow.getChildren().add(headerCell(column.header, column.width));
-        headerRow.getChildren().add(fixedWidthSpacer(DELETE_COLUMN_WIDTH));
+        headerRow.getChildren().add(fixedWidthSpacer(UiScale.px(DELETE_COLUMN_WIDTH)));
 
         VBox rowsBox = new VBox();
         // Row order is meaningful (instruction execution order; first-match page/user lookups), so
@@ -135,10 +136,10 @@ final class ConfigEditorWindowSupport
         VBox.setVgrow(tableCard, Priority.ALWAYS);
 
         Label titleLabel = new Label(sectionLabel);
-        titleLabel.getStyleClass().add("column-header");
+        titleLabel.getStyleClass().add("section-title");
 
         Label descriptionLabel = new Label(description);
-        descriptionLabel.getStyleClass().add("main-menu-subtitle");
+        descriptionLabel.getStyleClass().add("screen-subtitle");
         descriptionLabel.setWrapText(true);
 
         Button addButton = new Button("+ Add Row");
@@ -149,16 +150,16 @@ final class ConfigEditorWindowSupport
 
         Label countLabel = new Label();
         countLabel.textProperty().bind(Bindings.concat(Bindings.size(items).asString(), " row(s)"));
-        countLabel.getStyleClass().add("main-menu-subtitle");
+        countLabel.getStyleClass().add("screen-subtitle");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        HBox toolbar = new HBox(10, addButton, spacer, countLabel);
+        HBox toolbar = new HBox(UiScale.px(10), addButton, spacer, countLabel);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
-        VBox root = new VBox(10, titleLabel, descriptionLabel, toolbar, tableCard);
-        root.setPadding(new Insets(ROOT_PADDING));
+        VBox root = new VBox(UiScale.px(10), titleLabel, descriptionLabel, toolbar, tableCard);
+        root.setPadding(new Insets(UiScale.px(ROOT_PADDING)));
 
         Stage stage = new Stage();
         stage.initModality(Modality.NONE);
@@ -175,31 +176,30 @@ final class ConfigEditorWindowSupport
         // the whole table immediately, not just to floor how far it can be shrunk afterwards.
         int cellCount = columns.size() + 1 + (reorderable ? 1 : 0); // + delete column, + drag handle
         double contentWidth = columns.stream().mapToDouble(c -> c.width).sum()
-                + DELETE_COLUMN_WIDTH
-                + (reorderable ? DRAG_HANDLE_WIDTH : 0)
-                + (cellCount - 1) * COLUMN_SPACING // one gap between each pair of adjacent cells
-                + 2 * ROOT_PADDING
-                + SCROLLBAR_ALLOWANCE;
+                + UiScale.px(DELETE_COLUMN_WIDTH)
+                + (reorderable ? UiScale.px(DRAG_HANDLE_WIDTH) : 0)
+                + (cellCount - 1) * UiScale.px(COLUMN_SPACING) // one gap between each pair of adjacent cells
+                + 2 * UiScale.px(ROOT_PADDING)
+                + UiScale.px(SCROLLBAR_ALLOWANCE);
 
-        Scene scene = new Scene(root, Math.max(DEFAULT_WIDTH, contentWidth), DEFAULT_HEIGHT);
-        scene.getStylesheets().add(
-                ConfigEditorWindowSupport.class.getResource("/rs/ac/bg/etf/light-theme.css").toExternalForm());
+        Scene scene = new Scene(root, Math.max(UiScale.px(DEFAULT_WIDTH), contentWidth), UiScale.px(DEFAULT_HEIGHT));
+        UiScale.applyTheme(scene);
         stage.setScene(scene);
 
-        stage.setMinWidth(Math.max(MIN_WIDTH, contentWidth));
-        stage.setMinHeight(MIN_HEIGHT);
+        stage.setMinWidth(Math.max(UiScale.px(MIN_WIDTH), contentWidth));
+        stage.setMinHeight(UiScale.px(MIN_HEIGHT));
 
         return stage;
     }
 
     private static <T> HBox buildRow(T item, ObservableList<T> items, List<EditorColumn<T>> columns, boolean reorderable)
     {
-        HBox row = new HBox(COLUMN_SPACING);
+        HBox row = new HBox(UiScale.px(COLUMN_SPACING));
         row.getStyleClass().add("config-editor-row");
         row.setAlignment(Pos.CENTER_LEFT);
-        row.setMinHeight(ROW_HEIGHT);
-        row.setPrefHeight(ROW_HEIGHT);
-        row.setMaxHeight(ROW_HEIGHT);
+        row.setMinHeight(UiScale.px(ROW_HEIGHT));
+        row.setPrefHeight(UiScale.px(ROW_HEIGHT));
+        row.setMaxHeight(UiScale.px(ROW_HEIGHT));
 
         if (reorderable)
             row.getChildren().add(dragHandleCell(item, items, row));
@@ -212,13 +212,13 @@ final class ConfigEditorWindowSupport
         }
 
         Button removeButton = new Button("✕");
-        removeButton.getStyleClass().add("row-delete-button");
+        removeButton.getStyleClass().add("config-editor-delete-button");
         removeButton.setOnAction(e -> items.remove(item));
         HBox deleteCell = new HBox(removeButton);
         deleteCell.setAlignment(Pos.CENTER);
-        deleteCell.setPrefWidth(DELETE_COLUMN_WIDTH);
-        deleteCell.setMinWidth(DELETE_COLUMN_WIDTH);
-        deleteCell.setMaxWidth(DELETE_COLUMN_WIDTH);
+        deleteCell.setPrefWidth(UiScale.px(DELETE_COLUMN_WIDTH));
+        deleteCell.setMinWidth(UiScale.px(DELETE_COLUMN_WIDTH));
+        deleteCell.setMaxWidth(UiScale.px(DELETE_COLUMN_WIDTH));
         row.getChildren().add(deleteCell);
 
         return row;
@@ -236,9 +236,9 @@ final class ConfigEditorWindowSupport
     {
         Label handle = new Label("⋮⋮");
         handle.getStyleClass().add("config-editor-drag-handle");
-        handle.setPrefWidth(DRAG_HANDLE_WIDTH);
-        handle.setMinWidth(DRAG_HANDLE_WIDTH);
-        handle.setMaxWidth(DRAG_HANDLE_WIDTH);
+        handle.setPrefWidth(UiScale.px(DRAG_HANDLE_WIDTH));
+        handle.setMinWidth(UiScale.px(DRAG_HANDLE_WIDTH));
+        handle.setMaxWidth(UiScale.px(DRAG_HANDLE_WIDTH));
         handle.setAlignment(Pos.CENTER);
 
         handle.setOnDragDetected(event -> {

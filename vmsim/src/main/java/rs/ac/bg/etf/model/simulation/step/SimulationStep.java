@@ -6,6 +6,8 @@ import java.util.Set;
 
 import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
+import rs.ac.bg.etf.model.tlb.TLB;
+import rs.ac.bg.etf.model.tlb.TLBEntry;
 
 public abstract class SimulationStep<T extends SimulationContext>
 {
@@ -26,6 +28,28 @@ public abstract class SimulationStep<T extends SimulationContext>
      * The view layer turns this into displayable text.
      */
     public abstract StepDescription getStepDescription();
+
+    /**
+     * Where {@code entry} sits in the TLB, as a phrase to embed in a description: "TLB entry 1", or
+     * "TLB entry 1 (set 0)" when the TLB is set-associative -- numbered the way the TLB tab labels
+     * its tables. Only meaningful while the entry is still in the TLB (which is when descriptions
+     * are read: right after the step executes).
+     */
+    protected final StepDescription describeTlbEntry(TLBEntry entry)
+    {
+        return describeTlbSlot(context.getTLB().getEntries().indexOf(entry));
+    }
+
+    /** Same, for the entry at flat index {@code slot} of the TLB's entry list. */
+    protected final StepDescription describeTlbSlot(int slot)
+    {
+        TLB tlb = context.getTLB();
+        int set = tlb.setNumber(slot);
+
+        return set < 0
+                ? new StepDescription(StepDescriptionKey.TLB_ENTRY, tlb.entryNumber(slot))
+                : new StepDescription(StepDescriptionKey.TLB_ENTRY_IN_SET, tlb.entryNumber(slot), set);
+    }
 
     /** True for the step that starts a new instruction (only {@link InstructionFetchStep}). */
     public boolean isFirst()

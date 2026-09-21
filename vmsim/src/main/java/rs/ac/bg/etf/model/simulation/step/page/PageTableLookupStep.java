@@ -13,20 +13,23 @@ import rs.ac.bg.etf.model.table.PageTableDescriptor;
 public class PageTableLookupStep<T extends PageSimulationContext> extends SimulationStep<T>
 {
     private PageTableDescriptor lookupResult;
+    // Whose page table the entry was read from, captured in execute() for the description.
+    private int lookupUser;
 
-    protected PageTableLookupStep(T context) 
+    protected PageTableLookupStep(T context)
     {
         super(context);
     }
 
     @Override
-    public SimulationStep<T> execute() 
+    public SimulationStep<T> execute()
     {
         Instruction currentInstruction = context.getCurrentInstruction();
         PageTable pageTable = context.getPageTable(currentInstruction.getUser());
 
         PageTableDescriptor desc = pageTable.getEntryAndAdd(context.getPageComponent());
         lookupResult = desc;
+        lookupUser = currentInstruction.getUser();
 
         setAffectedComponents(SimulationComponent.MMU);
         if (desc.isValid())
@@ -48,11 +51,14 @@ public class PageTableLookupStep<T extends PageSimulationContext> extends Simula
     public StepDescription getStepDescription()
     {
         if (!lookupResult.isValid())
-            return new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_FAULT, lookupResult.getPage());
+            return new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_FAULT,
+                    lookupResult.getPage(), lookupUser);
 
         return lookupResult.isDirty()
-                ? new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_HIT_DIRTY, lookupResult.getPage(), lookupResult.getBlock())
-                : new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_HIT, lookupResult.getPage(), lookupResult.getBlock());
+                ? new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_HIT_DIRTY,
+                        lookupResult.getBlock(), lookupResult.getPage(), lookupUser)
+                : new StepDescription(StepDescriptionKey.PAGE_TABLE_LOOKUP_HIT,
+                        lookupResult.getBlock(), lookupResult.getPage(), lookupUser);
     }
 
 }

@@ -5,10 +5,22 @@ package rs.ac.bg.etf.model.simulation.step;
  * arguments in a {@link StepDescription}; the actual, locale-specific wording lives in a
  * view-layer resource bundle keyed by this enum's {@link #name()} -- this enum and
  * {@link StepDescription} are plain data, deliberately unaware of Locale/ResourceBundle.
+ *
+ * <p>Most constants are whole messages. The "phrase" ones ({@link #TLB_ENTRY} ...) are fragments
+ * that another message embeds: a {@link StepDescription} of one of them is passed as an argument of the
+ * message, and the formatter renders it in place -- so "where the block was read from" is worded once,
+ * whichever step says it.
  */
 public enum StepDescriptionKey
 {
     INSTRUCTION_FETCHED,
+
+    // Phrases: where an entry sits in the TLB, what a lookup searched, where a dirty bit was read.
+    TLB_ENTRY,
+    TLB_ENTRY_IN_SET,
+    TLB_SEARCHED_ALL,
+    TLB_SEARCHED_SET,
+    DIRTY_BIT_SOURCE_PAGE_TABLE,
 
     TLB_LOOKUP_HIT,
     TLB_LOOKUP_MISS,

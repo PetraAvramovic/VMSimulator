@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javafx.beans.value.ChangeListener;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.ObjectProperty;
@@ -37,6 +38,10 @@ import rs.ac.bg.etf.view.util.ValueConverter;
  */
 public class PagedMMUTabViewModel 
 {
+    // Named so dispose() can detach it: the view that owns this view model is rebuilt whenever the UI
+    // scale changes (see UiScale), while the simulation view model it listens to lives on.
+    private final ChangeListener<Number> stepListener = (obs, oldVal, newVal) -> refresh();
+
     public static final int WINDOW_SIZE = 7;
 
     /** Identifies each connector wire drawn on the MMU schematic, so the view can light it up on demand. */
@@ -120,7 +125,7 @@ public class PagedMMUTabViewModel
         blockHexDigits.set(ValueConverter.hexDigitsFor(frameBits));
         diskHexDigits.set(ValueConverter.hexDigitsFor(diskBits));
 
-        simulationViewModel.currentStepNumberProperty().addListener((obs, oldVal, newVal) -> refresh());
+        currentStepNumber.addListener(stepListener);
         refresh();
     }
 
@@ -355,5 +360,11 @@ public class PagedMMUTabViewModel
     private static String toHex(long value, int digits) 
     {
         return "0x" + String.format("%0" + digits + "X", value);
+    }
+
+    /** Stops following the simulation -- call when the view using this view model is discarded. */
+    public void dispose()
+    {
+        currentStepNumber.removeListener(stepListener);
     }
 }

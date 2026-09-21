@@ -1,7 +1,10 @@
 package rs.ac.bg.etf.view.inspector;
 
+import rs.ac.bg.etf.view.util.UiScale;
 import java.util.List;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.beans.property.IntegerProperty;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -15,6 +18,7 @@ import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
+import rs.ac.bg.etf.view.util.InspectorWindows;
 import rs.ac.bg.etf.view.util.ValueConverter;
 import rs.ac.bg.etf.view.util.WidthCalculator;
 import rs.ac.bg.etf.view.util.WindowedTableColumn;
@@ -34,11 +38,14 @@ import rs.ac.bg.etf.view.util.WindowedTableView;
  */
 public class DiskBlockInspectorWindow
 {
+    private final ChangeListener<Number> refreshOnStep;
+
+    // Design-size; scaled where they are used, inside build() (see InspectorWindows for the scale).
     private static final double ROOT_PADDING = 12;
     // JavaFX has no way to measure the native title bar's own font/chrome (icon, minimize/
     // maximize/close buttons) -- this is a generous stand-in so the estimated title width below
     // errs on the side of a little too wide rather than still clipping the address.
-    private static final Font TITLE_FONT = Font.font(12);
+    private static final double TITLE_FONT_SIZE = 12;
     private static final double TITLE_CHROME_WIDTH = 150;
     // Header label ("Disk Block 0x… content:") + the VBox's own spacing below it.
     private static final double HEADER_ROW_HEIGHT = 30;
@@ -62,10 +69,14 @@ public class DiskBlockInspectorWindow
         this.addressDigits = ValueConverter.hexDigitsFor(context.getDiskBits());
         this.offsetDigits = ValueConverter.hexDigitsFor(Math.max(1, context.getWordBits()));
         this.valueDigits = ValueConverter.hexDigitsFor(context.getAddressableUnit() * 8);
-        currentStepNumber.addListener((o, ov, nv) -> {
+        // Registered weakly on the (long-lived) simulation step property so this window can be garbage
+        // collected once the tab view that created it has been rebuilt for a new UI scale (see
+        // UiScale); this field is what keeps the listener alive for as long as the window itself is.
+        refreshOnStep = (o, ov, nv) -> {
             if (tableView != null)
                 tableView.refresh();
-        });
+        };
+        currentStepNumber.addListener(new WeakChangeListener<>(refreshOnStep));
     }
 
     /** Opens the window on {@code diskAddress}'s block, or closes it if it's already open on that
@@ -78,7 +89,7 @@ public class DiskBlockInspectorWindow
             return;
         }
         if (stage == null)
-            stage = build(owner);
+            stage = InspectorWindows.build(() -> build(owner));
         selectAddress(diskAddress);
         stage.show();
         stage.toFront();
@@ -100,38 +111,40 @@ public class DiskBlockInspectorWindow
     private Stage build(Window owner)
     {
         header = new Label();
-        header.getStyleClass().add("mmu-section-label");
+        header.getStyleClass().add("schematic-heading");
 
         tableView = new WindowedTableView<>(diskColumns(), null);
         VBox.setVgrow(tableView, Priority.ALWAYS);
 
-        VBox root = new VBox(8, header, tableView);
-        root.setPadding(new Insets(ROOT_PADDING));
+        double rootPadding = UiScale.px(ROOT_PADDING);
+        VBox root = new VBox(UiScale.px(8), header, tableView);
+        root.setPadding(new Insets(rootPadding));
 
         Stage s = new Stage();
         s.initModality(Modality.NONE);
         if (owner != null)
             s.initOwner(owner);
 
-        Scene scene = new Scene(root, 300, 420);
-        scene.getStylesheets().add(getClass().getResource("/rs/ac/bg/etf/light-theme.css").toExternalForm());
+        Scene scene = new Scene(root, UiScale.px(300), UiScale.px(420));
+        UiScale.applyTheme(scene);
         s.setScene(scene);
 
         // The longest title this window will ever show is fixed the moment addressDigits is known
         // (every digit at its widest, "F") -- so the floor can be set once here rather than
         // recomputed on every selectAddress().
         double titleMinWidth = titleWidth("Disk Block 0x" + "F".repeat(addressDigits));
-        s.setMinWidth(Math.max(tableView.minimumWidth() + 2 * ROOT_PADDING, titleMinWidth));
-        s.setMinHeight(HEADER_ROW_HEIGHT + tableView.minimumHeight() + 2 * ROOT_PADDING);
+        s.setMinWidth(Math.max(tableView.minimumWidth() + 2 * rootPadding, titleMinWidth));
+        s.setMinHeight(UiScale.px(HEADER_ROW_HEIGHT) + tableView.minimumHeight() + 2 * rootPadding);
 
         return s;
     }
 
-    private static double titleWidth(String title)
+    // Only called from build(), so at the inspector's own scale.
+    private double titleWidth(String title)
     {
         Text sample = new Text(title);
-        sample.setFont(TITLE_FONT);
-        return sample.getLayoutBounds().getWidth() + TITLE_CHROME_WIDTH;
+        sample.setFont(Font.font(UiScale.font(TITLE_FONT_SIZE)));
+        return sample.getLayoutBounds().getWidth() + UiScale.px(TITLE_CHROME_WIDTH);
     }
 
     private List<WindowedTableColumn<DiskWord>> diskColumns()
