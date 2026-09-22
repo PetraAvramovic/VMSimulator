@@ -442,6 +442,14 @@
     -fx-background-color: #1a1d21;
 }
 
+.menu-bar {
+    -fx-background-color: #1a1d21;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent transparent #3a4048 transparent;
+    -fx-border-width: 1px;
+    -fx-effect: null;
+}
+
 .back-button {
     -fx-min-width: 32px;
     -fx-pref-width: 32px;
@@ -567,6 +575,17 @@
 
 .tab-label {
     -fx-graphic-text-gap: 0;
+    -fx-font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -fx-font-size: 14px;
+}
+
+.tab-pane .tab {
+    -fx-padding: 5px 18px 5px 18px;
+}
+
+.tab-pane > .tab-header-area > .tab-header-background {
+    -fx-background-color: #1a1d21;
+    -fx-effect: null;
 }
 
 .tab-notification-badge {

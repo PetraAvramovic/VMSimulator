@@ -97,6 +97,15 @@ public class SimulationViewModel
         }
     }
 
+    /** Leaves the workbench for the configuration screen, to set up a fresh simulation. This one
+     *  is discarded once the new one starts (see AppViewModel.onConfigToSimulation). */
+    public void startNewSimulation()
+    {
+        if (navigationListener != null) {
+            navigationListener.onSimulationToNewSimulation();
+        }
+    }
+
     public IntegerProperty currentStepNumberProperty() 
     {
         return currentStepNumber;
@@ -207,6 +216,41 @@ public class SimulationViewModel
         } finally {
             syncFromSimulation();
         }
+    }
+
+    /**
+     * Runs every remaining step until the instruction stream is exhausted. Reaching the end this
+     * way is the expected outcome, not an error -- unlike {@link #executeNextStep()}'s own
+     * end-of-stream case (a single step that made no progress at all), this can execute many steps
+     * successfully before the final, failing attempt, so the description of whichever real step ran
+     * last is left showing instead of being cleared.
+     */
+    public void executeToEnd()
+    {
+        try {
+            while (true) {
+                simulation.nextStep();
+                StepDescription description = simulation.getCurrentStepDescription();
+                currentStepDescription.set(description);
+                logEntries.add(description);
+            }
+        } catch (NoSuchElementException e) {
+            // Nothing left to run -- if that was already true before this call (no step ever set
+            // currentStepDescription above), fall back the same way executeNextStep() does.
+            if (currentStepDescription.get() == null)
+                fallbackMessage.set("End of instruction stream — nothing left to execute.");
+        } catch (Exception e) {
+            currentStepDescription.set(null);
+            fallbackMessage.set("Step engine is not yet wired up for this configuration.");
+        } finally {
+            syncFromSimulation();
+        }
+    }
+
+    /** Reverts all the way back to before the first step -- the simulation's very start. */
+    public void restart()
+    {
+        revertToStep(0);
     }
 
     public void executePreviousStep()

@@ -81,7 +81,9 @@ public class AppViewModel implements MainMenuNavigationListener, ConfigurationNa
             this.mainMenuViewModel.resumeAvailableProperty().set(true);
             this.currentScreen.set(ApplicationScreenState.SIMULATION);
         } catch (Exception e) {
-            System.out.println("AppViewModel: Failed to initialize simulation - " + e.getMessage());
+            // A bad config should have already been rejected on the configuration screen; if one
+            // still gets here, staying on that screen (currentScreen untouched) beats navigating to
+            // a broken simulation.
         }
     }
 
@@ -95,6 +97,14 @@ public class AppViewModel implements MainMenuNavigationListener, ConfigurationNa
     public void onSimulationToMainMenu()
     {
         this.currentScreen.set(ApplicationScreenState.MAIN_MENU);
+    }
+
+    @Override
+    public void onSimulationToNewSimulation()
+    {
+        // The old simulationViewModel is simply overwritten once onConfigToSimulation runs; nothing
+        // to tear down here (mirrors how the main menu's own "Start" already gets here).
+        this.currentScreen.set(ApplicationScreenState.CONFIGURATION);
     }
 
     @Override

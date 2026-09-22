@@ -94,12 +94,17 @@ public class PageEvictionStep<T extends PageSimulationContext> extends Simulatio
     @Override
     public StepDescription getStepDescription()
     {
+        // The dirty case doesn't need to say where the dirty bit came from -- the very next step
+        // (PageStoreToDiskStep) already says the page is dirty and being written back. Only the
+        // clean case is the sole place that fact appears, so only it names the source.
+        if (victimWasDirty)
+            return new StepDescription(StepDescriptionKey.FRAME_EVICTED_DIRTY,
+                    victimFrame, victimFrameMapping.page(), victimFrameMapping.user());
+
         StepDescription dirtyBitSource = victimTlbSlot >= 0
                 ? describeTlbSlot(victimTlbSlot)
                 : new StepDescription(StepDescriptionKey.DIRTY_BIT_SOURCE_PAGE_TABLE);
-
-        return new StepDescription(
-                victimWasDirty ? StepDescriptionKey.FRAME_EVICTED_DIRTY : StepDescriptionKey.FRAME_EVICTED,
+        return new StepDescription(StepDescriptionKey.FRAME_EVICTED,
                 victimFrame, victimFrameMapping.page(), victimFrameMapping.user(), dirtyBitSource);
     }
 

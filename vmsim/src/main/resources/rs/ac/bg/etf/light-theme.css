@@ -519,6 +519,19 @@
     -fx-background-color: #eef0f2;
 }
 
+/* Modena's default .menu-bar is a 3-layer derived-border/body gradient plus a baked-in inner
+   shadow -- meant to read as a small raised toolbar, but once composed against this app's own
+   background it shows up as an odd banded glow rather than a clean bar. Flattened to the same
+   single flat colour + bottom border every other header strip in this app uses (.data-table-header
+   below), so it reads as part of the window chrome instead of a separate floating control. */
+.menu-bar {
+    -fx-background-color: #eef0f2;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent transparent #dcdde1 transparent;
+    -fx-border-width: 1px;
+    -fx-effect: null;
+}
+
 /* Small circular back button floating in the workbench's top-left corner. Overrides the
    wide default .button geometry to a fixed round icon. The chevron itself is a shape node
    (see BackButton.create), not a text glyph, so it centres exactly regardless of font metrics. */
@@ -696,6 +709,23 @@
    TabPane, so nothing else is affected. */
 .tab-label {
     -fx-graphic-text-gap: 0;
+    -fx-font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -fx-font-size: 14px;
+}
+
+/* Slightly bigger clickable header cards (MMU/TLB/OS/Memory) than Modena's own default padding, to
+   match .tab-label's own font-size above -- otherwise a bigger label would just crowd the same
+   cramped box. Targets every Tab regardless of the skin's exact internal nesting. */
+.tab-pane .tab {
+    -fx-padding: 5px 18px 5px 18px;
+}
+
+/* Same flattening as .menu-bar above (see its own comment): Modena's tab-strip background is
+   meant to look subtly raised above the tab content below it, which reads as a stray shadow band
+   once composed against this app's own chrome. */
+.tab-pane > .tab-header-area > .tab-header-background {
+    -fx-background-color: #eef0f2;
+    -fx-effect: null;
 }
 
 /* The dot in a tab's header marking an off-window side effect the user hasn't seen yet

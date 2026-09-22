@@ -18,6 +18,8 @@ public class DiskAddressGenerator
         this.seed = (mixed ^ (mixed >>> 16)) & 0xFFFFFFFFL;
     }
 
+    // A permutation of [0, TOTAL_DISK_BLOCKS): distinct inputs below that bound never share an address
+    // (SimulationConfig.validate() keeps the (user, page) pairs within it).
     public long getDiskAddress(long input) {
         long derivedInput = (input + seed) % TOTAL_DISK_BLOCKS;
 

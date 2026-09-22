@@ -24,8 +24,12 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuBar;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollBar;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
@@ -35,10 +39,15 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.shape.Circle;
+import javafx.stage.Window;
 import rs.ac.bg.etf.model.memory.Instruction;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.SimulationComponent;
 import rs.ac.bg.etf.model.simulation.step.StepDescription;
+import rs.ac.bg.etf.view.inspector.MemoryInspectorWindow;
+import rs.ac.bg.etf.view.inspector.PageTableInspectorWindow;
+import rs.ac.bg.etf.view.inspector.TLBInspectorWindow;
+import rs.ac.bg.etf.view.os.ReplacementQueueInspectorWindow;
 import rs.ac.bg.etf.view.tlb.PagedTLBTabView;
 import rs.ac.bg.etf.view.util.BackButton;
 import rs.ac.bg.etf.view.util.PostLayoutTask;
@@ -61,11 +70,13 @@ public class SimulationView {
     private final double SIDEBAR_MAX_WIDTH = UiScale.px(420);
     // Circle's own CSS radius property isn't reliable for sizing (PagedMMUTabView's adder circle
     // sets its radius the same way, in code, and only styles fill/stroke via CSS -- see
-    // .mmu-adder-circle), so the tab notification dot's size lives here instead of in CSS.
-    private final double TAB_NOTIFICATION_BADGE_RADIUS = UiScale.px(4);
+    // .mmu-adder-circle), so the tab notification dot's size lives here instead of in CSS. Kept in
+    // step with .tab-label's own font-size (14px, up from Modena's default ~13px) by hand -- there's
+    // no live binding to the CSS value, so if that font-size changes again, resize these to match.
+    private final double TAB_NOTIFICATION_BADGE_RADIUS = UiScale.px(5);
     // Breathing room between the dot and the tab text that follows it, reserved only while the
     // badge is actually showing.
-    private final double TAB_NOTIFICATION_BADGE_GAP = UiScale.px(6);
+    private final double TAB_NOTIFICATION_BADGE_GAP = UiScale.px(7);
     // The instruction list's Index column has no configured upper bound (an instruction file can be
     // any length), so its width is reserved for this many digits rather than measured from the
     // actual (possibly much shorter) instruction list -- otherwise a short test file sizes the
@@ -95,6 +106,8 @@ public class SimulationView {
     private static final String TAB_HEADER_AREA_STYLE_CLASS = "tab-header-area";
 
     private final SplitPane layoutContainer;
+    // What getRootContainerNode() actually hands App: the menu bar stacked above layoutContainer.
+    private final VBox workbenchRoot;
 
     // Everything this view registered on the (longer-lived) view models, undone by dispose().
     // The workbench is rebuilt whenever the UI scale changes, so an old view must not stay wired to
@@ -105,8 +118,16 @@ public class SimulationView {
     private final Map<Tab, Supplier<Node>> pendingTabContent = new HashMap<>();
 
     public SimulationView(SimulationViewModel viewModel) {
+        // Built eagerly, unlike the OS tab's own view (see lazyTab) -- the View menu's Replacement
+        // Queue Inspector must be able to open regardless of whether that tab has ever been shown.
+        // Its own view (built below, still lazily) reuses this exact instance rather than a second one.
+        PagedOSTabViewModel osTabViewModel = viewModel.getContext() instanceof PageSimulationContext pageContext
+                ? new PagedOSTabViewModel(pageContext, viewModel) : null;
+        if (osTabViewModel != null)
+            teardown.add(osTabViewModel::dispose);
+
         VBox leftSidebar = buildLeftSidebar(viewModel);
-        TabPane tabPane = buildTabPane(viewModel);
+        TabPane tabPane = buildTabPane(viewModel, osTabViewModel);
         VBox rightSidebar = buildRightSidebar(viewModel);
 
         // The workbench's minimum size is what App's ResponsiveHost sizes the UI scale against, so it
@@ -140,6 +161,90 @@ public class SimulationView {
                 layoutContainer.setDividerPositions(LEFT_DIVIDER_POSITION, RIGHT_DIVIDER_POSITION);
         placeDividers.run();
         layoutContainer.widthProperty().addListener((observable, oldWidth, newWidth) -> placeDividers.run());
+
+        MenuBar menuBar = buildMenuBar(viewModel, osTabViewModel);
+        this.workbenchRoot = new VBox(menuBar, layoutContainer);
+        VBox.setVgrow(layoutContainer, Priority.ALWAYS);
+    }
+
+    // -------------------------------------------------------------------------
+    // MENU BAR: Simulation (restart / skip to end / new simulation) + View (inspector windows)
+    // -------------------------------------------------------------------------
+    private MenuBar buildMenuBar(SimulationViewModel viewModel, PagedOSTabViewModel osTabViewModel) {
+        MenuItem restartItem = new MenuItem("Restart Simulation");
+        restartItem.setOnAction(e -> viewModel.restart());
+
+        MenuItem skipToEndItem = new MenuItem("Skip to End");
+        skipToEndItem.setOnAction(e -> viewModel.executeToEnd());
+
+        MenuItem newSimulationItem = new MenuItem("New Simulation…");
+        newSimulationItem.setOnAction(e -> viewModel.startNewSimulation());
+
+        Menu simulationMenu = new Menu("Simulation");
+        simulationMenu.getItems().addAll(restartItem, skipToEndItem, new SeparatorMenuItem(), newSimulationItem);
+
+        MenuBar menuBar = new MenuBar();
+        // VBox only stretches a child whose own maxWidth allows it; spelled out explicitly here
+        // rather than assumed, so the bar reliably spans the full workbench width.
+        menuBar.setMaxWidth(Double.MAX_VALUE);
+        Menu viewMenu = new Menu("View");
+        viewMenu.getItems().addAll(buildInspectorMenuItems(menuBar, viewModel, osTabViewModel));
+
+        menuBar.getMenus().addAll(simulationMenu, viewMenu);
+        return menuBar;
+    }
+
+    /**
+     * One item per inspector window that can meaningfully open on its own (i.e. without first
+     * needing a specific sub-address picked elsewhere, the way the Disk Block inspector does from
+     * the OS tab's disk box or the Page Table inspector's own Disk column) -- Page Table, TLB,
+     * Memory, and the FIFO Replacement Queue. Each opens its own instance, independent of whichever
+     * tab's inline entry point (if any) also opens that same kind of inspector -- the existing
+     * per-tab inspectors already tolerate more than one live instance of the same kind (e.g. the OS
+     * tab's disk box and the page table inspector's Disk column each own a separate
+     * {@code DiskBlockInspectorWindow}), so this follows the same, already-established pattern
+     * rather than threading a single shared instance through both call sites.
+     */
+    private List<MenuItem> buildInspectorMenuItems(MenuBar anchor, SimulationViewModel viewModel, PagedOSTabViewModel osTabViewModel) {
+        MenuItem pageTableItem = new MenuItem("Page Table Inspector");
+        MenuItem tlbItem = new MenuItem("TLB Inspector");
+        MenuItem memoryItem = new MenuItem("Memory Inspector");
+        MenuItem replacementQueueItem = new MenuItem("Replacement Queue Inspector");
+
+        // Page Table / Memory / Replacement Queue are paged-specific (like the tabs' own placeholder
+        // fallback for a translation type that isn't paged); the TLB inspector only needs the
+        // generic SimulationContext, so it stays enabled regardless.
+        if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
+            PageTableInspectorWindow pageTableInspector =
+                    new PageTableInspectorWindow(pageContext, viewModel.currentStepNumberProperty());
+            pageTableItem.setOnAction(e -> pageTableInspector.toggle(ownerWindow(anchor)));
+
+            MemoryInspectorWindow memoryInspector =
+                    new MemoryInspectorWindow(pageContext, viewModel.currentStepNumberProperty());
+            memoryItem.setOnAction(e -> {
+                long seed = pageContext.getCurrentPhysicalAddress();
+                memoryInspector.toggle(ownerWindow(anchor), seed >= 0 ? seed : 0);
+            });
+        } else {
+            pageTableItem.setDisable(true);
+            memoryItem.setDisable(true);
+        }
+
+        TLBInspectorWindow tlbInspector = new TLBInspectorWindow(viewModel.getContext(), viewModel.currentStepNumberProperty());
+        tlbItem.setOnAction(e -> tlbInspector.toggle(ownerWindow(anchor)));
+
+        if (osTabViewModel != null) {
+            ReplacementQueueInspectorWindow replacementQueueInspector = new ReplacementQueueInspectorWindow(osTabViewModel);
+            replacementQueueItem.setOnAction(e -> replacementQueueInspector.toggle(ownerWindow(anchor)));
+        } else {
+            replacementQueueItem.setDisable(true);
+        }
+
+        return List.of(pageTableItem, tlbItem, memoryItem, replacementQueueItem);
+    }
+
+    private static Window ownerWindow(Node anchor) {
+        return anchor.getScene() != null ? anchor.getScene().getWindow() : null;
     }
 
     /**
@@ -398,7 +503,7 @@ public class SimulationView {
     // -------------------------------------------------------------------------
     // CENTER: MMU / TLB / OS tabs (placeholder content for now)
     // -------------------------------------------------------------------------
-    private TabPane buildTabPane(SimulationViewModel viewModel) {
+    private TabPane buildTabPane(SimulationViewModel viewModel, PagedOSTabViewModel osTabViewModel) {
         // TabPane's skin doesn't report its tab contents' minimum sizes upward (a schematic tab's
         // ScrollPane hides its canvas's size from it anyway), so the strip's own height and the
         // largest tab minimum are added up here -- that is what keeps the workbench from ever being
@@ -447,7 +552,7 @@ public class SimulationView {
         // would make every resize several times slower for nothing.
         Tab mmuTab = lazyTab("MMU", () -> buildMmuTabContent(viewModel));
         Tab tlbTab = lazyTab("TLB", () -> buildTlbTabContent(viewModel));
-        Tab osTab = lazyTab("OS", () -> buildOsTabContent(viewModel));
+        Tab osTab = lazyTab("OS", () -> buildOsTabContent(osTabViewModel));
         Tab memoryTab = lazyTab("Memory", () -> buildMemoryTabContent(viewModel));
 
         tabPane.getTabs().addAll(mmuTab, tlbTab, osTab, memoryTab);
@@ -528,12 +633,12 @@ public class SimulationView {
                 "Will visualize physical memory contents around the currently addressed word.");
     }
 
-    private Node buildOsTabContent(SimulationViewModel viewModel) {
-        if (viewModel.getContext() instanceof PageSimulationContext pageContext) {
-            PagedOSTabViewModel osTabViewModel = new PagedOSTabViewModel(pageContext, viewModel);
-            teardown.add(osTabViewModel::dispose);
+    // osTabViewModel is built eagerly, in the constructor (see SimulationView(...)) -- not here --
+    // so the View menu's Replacement Queue Inspector can use it regardless of whether this tab's
+    // view has ever been built; null only when the context isn't paged yet.
+    private Node buildOsTabContent(PagedOSTabViewModel osTabViewModel) {
+        if (osTabViewModel != null)
             return new PagedOSTabView(osTabViewModel);
-        }
 
         return placeholderTabContent(
                 "Operating System\n\n" +
@@ -733,6 +838,6 @@ public class SimulationView {
      * Exposes the root container layout node so App.java can mount it into the window scene.
      */
     public Parent getRootContainerNode() {
-        return this.layoutContainer;
+        return this.workbenchRoot;
     }
 }

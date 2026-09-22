@@ -63,8 +63,6 @@ public class PageSimulationContext extends SimulationContext
         pageTableSize = getPageTableDescriptorSize() * maxPages;
         long pagesPerPageTable = Math.ceilDiv(pageTableSize, getPageSize());
 
-        System.out.println(pagesPerPageTable);
-
         HashMap<PageTableDescriptor, Integer> frameInit = new HashMap<>();
 
         for (int i = 0; i < numberOfUsers; i++)

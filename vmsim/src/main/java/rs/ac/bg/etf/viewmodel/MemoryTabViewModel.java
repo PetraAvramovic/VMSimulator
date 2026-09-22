@@ -13,6 +13,7 @@ import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
 import rs.ac.bg.etf.model.simulation.Simulation;
 import rs.ac.bg.etf.model.simulation.SimulationContext;
+import rs.ac.bg.etf.model.simulation.step.InstructionFetchStep;
 import rs.ac.bg.etf.model.simulation.step.SimulationStep;
 import rs.ac.bg.etf.model.simulation.step.page.PageLoadIntoMemoryStep;
 import rs.ac.bg.etf.view.util.ValueConverter;
@@ -113,9 +114,9 @@ public class MemoryTabViewModel
         // A page just loaded into a frame, but this instruction's own physical address hasn't been
         // formed yet (that happens next) -- rather than leave the table fogged and pointed at
         // wherever it last was, or centre it on a word offset that isn't known yet, open it right at
-        // the frame's first word: that frame is what this step is about.
-        SimulationStep<? extends SimulationContext> last = lastExecutedStep();
-        boolean justLoaded = !addressed && last instanceof PageLoadIntoMemoryStep;
+        // the frame's first word: that frame is what this step is about. Not only the load step itself:
+        // a faulting write also sets the page's dirty bit before its address is formed.
+        boolean justLoaded = !addressed && loadedSinceFetch();
 
         long windowStart;
         if (addressed)
@@ -149,11 +150,19 @@ public class MemoryTabViewModel
         }
     }
 
-    /** The single most-recently-executed step, or null before any step has run. */
-    private SimulationStep<? extends SimulationContext> lastExecutedStep()
+    /** True if a page has been loaded into a frame at any point since the current instruction's fetch. */
+    private boolean loadedSinceFetch()
     {
         List<SimulationStep<? extends SimulationContext>> history = simulation.getExecutedSteps();
-        return history.isEmpty() ? null : history.get(history.size() - 1);
+        for (int i = history.size() - 1; i >= 0; i--)
+        {
+            SimulationStep<? extends SimulationContext> step = history.get(i);
+            if (step instanceof InstructionFetchStep)
+                return false;
+            if (step instanceof PageLoadIntoMemoryStep)
+                return true;
+        }
+        return false;
     }
 
     /** Stops following the simulation -- call when the view using this view model is discarded. */

@@ -264,7 +264,9 @@ public abstract class TLB
      */
     public long calculateTag(int processId, long addressComponent)
     {
-        return (processId << addressBits) | addressComponent;
+        // Shifted as a long: an int shift is masked mod 32, so from 32 address bits up the process id
+        // would land on the address component's own bits, and from 31 it would sign-extend.
+        return ((long) processId << addressBits) | addressComponent;
     }
 
     /**

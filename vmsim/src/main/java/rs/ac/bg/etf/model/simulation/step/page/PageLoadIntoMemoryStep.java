@@ -3,6 +3,7 @@ package rs.ac.bg.etf.model.simulation.step.page;
 import java.util.SortedMap;
 
 import rs.ac.bg.etf.model.disk.Disk;
+import rs.ac.bg.etf.model.memory.Instruction.AccessType;
 import rs.ac.bg.etf.model.memory.Memory;
 import rs.ac.bg.etf.model.os.PageOSMemoryManager;
 import rs.ac.bg.etf.model.simulation.PageSimulationContext;
@@ -46,7 +47,7 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
 
         long memoryAddress = frame << context.getWordBits();
         previousBlock = memory.readBlock(memoryAddress, context.getPageSize());
-        memory.writeBlock(memoryAddress, block);
+        memory.writeBlock(memoryAddress, block, context.getPageSize());
 
         previousFrame = descriptor.getBlock();
         descriptor.setValid(true);
@@ -61,6 +62,13 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
         context.setCurrentLoadDiskAddress(diskAddress);
 
         setAffectedComponents(SimulationComponent.OS, SimulationComponent.MMU, SimulationComponent.MEMORY);
+
+        // The faulting instruction is not restarted from the page table lookup, so the dirty-bit update
+        // a write to a resident page gets there (PageTableLookupStep) is done here instead. Without it a
+        // write to a just-loaded page leaves its entry, and the TLB entry copied from it, clean -- and
+        // evicting the page later would drop the write.
+        if (!descriptor.isDirty() && context.getCurrentInstruction().getAccessType() == AccessType.WR)
+            return new PageTableUpdateDirtyBitStep<T>(context, descriptor);
         return new FormPhysicalAddressFromPageTableStep<T>(context, descriptor);
     }
 
@@ -71,7 +79,7 @@ public class PageLoadIntoMemoryStep<T extends PageSimulationContext> extends Sim
         Memory memory = context.getMemory();
 
         long memoryAddress = frame << context.getWordBits();
-        memory.writeBlock(memoryAddress, previousBlock);
+        memory.writeBlock(memoryAddress, previousBlock, context.getPageSize());
 
         descriptor.setValid(false);
         descriptor.setBlock(previousFrame);

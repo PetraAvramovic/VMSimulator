@@ -23,24 +23,16 @@ public class MainMenuViewModel
 
     public void executeStartNavigation()
     {
-        System.out.println("MainMenuViewModel: New Simulation button clicked.");
-
         navigationListener.onMainMenuToStart();
-
     }
 
     public void executeResumeNavigation()
     {
-        System.out.println("MainMenuViewModel: Resume button clicked.");
-
         navigationListener.onMainMenuToResume();
     }
 
-    public void executeSettingsRequest() 
+    public void executeSettingsRequest()
     {
-        System.out.println("MainMenuViewModel: Settings button clicked.");
-       
         navigationListener.onMainMenuToSettings();
-        
     }
 }

@@ -193,11 +193,31 @@ public class PagedOSTabViewModel
         else
             state = FrameState.ALLOCATED;
 
-        PageTableDescriptor descriptor = mapping != null ? mapping.descriptor() : null;
+        // PageEvictionStep already frees the frame from the OS manager's own bookkeeping the moment
+        // it runs (so a subsequent fault in the same instruction can allocate it), so by the time
+        // this row is drawn for the "evicting" step itself, osManager no longer has a mapping for
+        // it -- the row would otherwise go blank for exactly the step meant to show what's being
+        // evicted. The victim's identity survives in the context (set by PageEvictionStep), and its
+        // descriptor is still reachable through the page table, so pull from there instead while
+        // this frame is the one being evicted.
+        int user;
+        long page;
+        PageTableDescriptor descriptor;
+        if (state == FrameState.EVICTING)
+        {
+            user = context.getPageEvictionVictimUser();
+            page = context.getPageEvictionVictimPage();
+            descriptor = context.getPageTable(user).getEntry(page);
+        }
+        else
+        {
+            descriptor = mapping != null ? mapping.descriptor() : null;
+            user = mapping != null ? mapping.user() : -1;
+            page = mapping != null ? mapping.page() : -1;
+        }
+
         return new FrameRow(
-                frame, state,
-                mapping != null ? mapping.user() : -1,
-                mapping != null ? mapping.page() : -1,
+                frame, state, user, page,
                 descriptor != null && descriptor.isValid(),
                 descriptor != null && descriptor.isDirty(),
                 descriptor != null ? descriptor.getDisk() : 0,

@@ -35,7 +35,8 @@ public class PageStoreToDiskStep<T extends PageSimulationContext> extends Simula
 
         frame = descriptor.getBlock();
         victimUser = context.getPageEvictionVictimUser();
-        SortedMap<Long, Long> block = memory.readBlock(frame, context.getPageSize());
+        // The frame's words start at frame << wordBits (the same address PageLoadIntoMemoryStep loads into).
+        SortedMap<Long, Long> block = memory.readBlock(frame << context.getWordBits(), context.getPageSize());
         disk.writeBlock(diskAddress, block);
         descriptor.setDirty(false);
 

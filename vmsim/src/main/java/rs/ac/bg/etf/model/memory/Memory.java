@@ -79,9 +79,20 @@ public class Memory
         return remap(address, memory.subMap(address, address + size), false);
     }
 
-    public void writeBlock(long address, SortedMap<Long, Long> block)
+    /**
+     * Replaces the whole {@code [address, address + size)} range with {@code block}: every
+     * existing entry in that range is cleared first, not merged into. {@code block} is sparse
+     * (an absent offset reads as 0, see {@link #read}), so a plain {@code putAll} would only ever
+     * overwrite the offsets {@code block} happens to list and leave whatever was already there at
+     * every other offset in the range untouched -- e.g. a page loaded into a frame that previously
+     * held different (or more) data, or {@code previousBlock} on
+     * {@link rs.ac.bg.etf.model.simulation.step.page.PageLoadIntoMemoryStep#undo()} restoring a
+     * frame to a state with fewer entries than what is currently written there, would both leave
+     * stale values behind instead of actually reverting.
+     */
+    public void writeBlock(long address, SortedMap<Long, Long> block, long size)
     {
-        block = remap(address, block, true);
-        memory.putAll(block);
+        memory.subMap(address, address + size).clear();
+        memory.putAll(remap(address, block, true));
     }
 }

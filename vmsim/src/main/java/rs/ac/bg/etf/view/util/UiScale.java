@@ -253,7 +253,7 @@ public final class UiScale {
             generated.put(key(atFactor), file.toUri().toString());
             return true;
         } catch (IOException | RuntimeException e) {
-            System.err.println("UiScale: could not prepare the " + forTheme + " " + atFactor + "x theme - " + e.getMessage());
+            // Caller (switchScale) treats false as "stay at the current scale/theme".
             return false;
         }
     }

@@ -159,6 +159,18 @@ public class SimulationConfig
             );
         }
 
+        // Every page of every user needs a disk block of its own, and a block's address is diskBits wide
+        // (the Disk field of a page table entry). Past that DiskAddressGenerator would wrap around and hand
+        // two pages the same block. numberOfUsers is a power of two here, so this is log2 of it.
+        int userBits = Integer.bitCount(numberOfUsers - 1);
+        if (pageBits + userBits > diskBits)
+        {
+            throw new InvalidConfig(
+                "pageBits (" + pageBits + ") plus the " + userBits + " bit(s) that number the users exceeds the "
+                + diskBits + "-bit disk address: every page of every user needs its own disk block"
+            );
+        }
+
         if (tlbType == TLBType.SET_ASSOCIATIVE)
         {
             if (!isPowerOfTwo(tlbEntriesPerSet))
@@ -538,9 +550,11 @@ public class SimulationConfig
 
     public long generateDiskSeed() 
     {
+        // The enum's name, not the enum: Enum.hashCode() is an identity hash, which the JVM does not keep
+        // the same from one run (or JVM) to the next -- and so would every disk address derived from this.
         return Objects.hash(
-            this.translationType, 
-            this.wordBits, 
+            this.translationType != null ? this.translationType.name() : null,
+            this.wordBits,
             this.pageBits, 
             this.segmentBits,
             this.numberOfUsers, 

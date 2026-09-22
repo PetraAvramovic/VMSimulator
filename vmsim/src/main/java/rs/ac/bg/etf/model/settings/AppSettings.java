@@ -37,7 +37,7 @@ public class AppSettings {
                 properties.store(out, FILE_COMMENT);
             }
         } catch (IOException | SecurityException e) {
-            System.err.println("AppSettings: could not save the settings - " + e.getMessage());
+            // See the method doc: a file that can't be written just means it is not remembered.
         }
     }
 
